@@ -8,11 +8,7 @@ secfxt = mpc.SecFlt(4)
 
 async def main():
     async with mpc:
-        ls = seclist([i for i in range(6)], sectype=secint)
-        ls = mpc.input(ls)
-        ic(type(ls))
-        ic(len(ls))
-        ic(ls[2:])
-
-
+        ls = seclist([], sectype=secint)
+        n = await mpc.output(ls.count(-1))
+        ic(n)
 mpc.run(main())

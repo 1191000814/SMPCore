@@ -18,10 +18,11 @@ AUTH = ('', '')
 V = 15
 L = 3
 
+secint4 = mpc.SecInt(4)
 
-def secint4(num):
+
+def secint(num):
     # 返回加密的4-bit数字
-    secint4 = mpc.SecInt(4)
     return secint4(num)
 
 
@@ -43,7 +44,7 @@ async def secure_firm_core(lamb):
             degree_list = records[0]['degree_list']
             assert isinstance(degree_list, list)
             # 换成安全类型, np.array(V, )
-            sec_degree_array = np.array([secint4(d) for d in degree_list])
+            sec_degree_array = np.array([secint(d) for d in degree_list])
             # 从mpc.input到mpc.output之间的数据都是加密的,output之后就没有加密了
             # Degree指的是所有的度, np.array(V * L)
             Degree = mpc.input(sec_degree_array)
@@ -103,7 +104,7 @@ async def secure_firm_core_mock(lamb):
             context, mpc.pid).fields['degree_list']
         assert isinstance(degree_list, list)
         # 换成安全类型, np.array(V, )
-        sec_degree_list = [secint4(d) for d in degree_list]
+        sec_degree_list = [secint(d) for d in degree_list]
         # 从mpc.input到mpc.output之间的数据都是加密的,output之后就没有加密了
         # Degree指的是所有的度, np.array(V * L)
         Degree = mpc.input(sec_degree_list)
@@ -119,7 +120,7 @@ async def secure_firm_core_mock(lamb):
                 if p[0] is None:
                     assert not p[1]
                     p[0] = top_degree
-                    p[1].append(secint4(i))
+                    p[1].append(secint(i))
                     break
                 # elif p[0] == top_degree:
                 #     assert p[1]
@@ -128,17 +129,17 @@ async def secure_firm_core_mock(lamb):
                 else:
                     # 因为p[0]不为None, 那么p[1]也不为空数组
                     p[1] = mpc.if_else(p[0] == top_degree,
-                                       p[1] + [secint4(i)], p[1])
-            # assert I[i] <= secint4(V)
+                                       p[1] + [secint(i)], p[1])
+            # assert I[i] <= secint(V)
         # I = await mpc.output(I)
         # core是最终要返回的结果, 但是也需要加密, 否则将不能输出
-        core = [[secint4(-1)] for _ in range(V - 1)]
+        core = [[secint(-1)] for _ in range(V - 1)]
         # 下面是根据k逐渐增大来依次淘汰顶点
         v_list = []
         for k in range(V - 1):
             for p in B:
-                v_list = mpc.if_else(p[0] == secint4(k), p[1], v_list)
-                # if p[0] == secint4(k):
+                v_list = mpc.if_else(p[0] == secint(k), p[1], v_list)
+                # if p[0] == secint(k):
                 #     v_set = p[1]
             while v_list:
                 ic(I)
@@ -156,12 +157,12 @@ async def secure_firm_core_mock(lamb):
                 if updated:
                     for u_id, d in updated.items():
                         if d == I[u_id] - 1 and I[u_id] > k:
-                            secure_updated.append(secint4(u_id))
+                            secure_updated.append(secint(u_id))
                 # 不同的层之间传的节点可能有重复
                 secure_updated = mpc.input(secure_updated)
                 for u_id in secure_updated:
                     for p in B:
-                        if p[0] == secint4(u_id):
+                        if p[0] == secint(u_id):
                             p[1].remove(I[u_id])
                             top_degree = mpc.sorted(
                                 Degree[:, u_id])[-lamb]  # 第lamb+1大的度
@@ -180,87 +181,101 @@ async def secure_firm_core_mock2(lamb):
     async with mpc:
         # 每个顶点vertices对应的Top-λ(deg(vertices))
         ic(f'{mpc.pid + 1} of {L} party')
-        s_firmcore_mage.init_degree(context)
-        I = [-1 for _ in range(V)]
+        I = seclist([-1 for _ in range(V)], secint4)
+        # 获取整个多层图的度矩阵
         degree_list = s_firmcore_mage.get_all_degree(
             context, mpc.pid).fields['degree_list']
         assert isinstance(degree_list, list)
-        # 换成安全类型, np.array(V, )
-        sec_degree_list = [secint4(d) for d in degree_list]
-        # 从mpc.input到mpc.output之间的数据都是加密的,output之后就没有加密了
+        # 换成安全类型的list
+        sec_degree_list = [secint(d) for d in degree_list]
+        # * 从mpc.input输出的数据都是加密的了, 因为获取了其他方的数据
         # Degree指的是所有的度, np.array(V * L)
-        Degree = mpc.input(sec_degree_list)
-        Degree = np.array(Degree)
-        # 在加密状态下求每个v第λ大的度
+        Degree = np.array(mpc.input(sec_degree_list))
+        # 求每个节点v第λ大的度, 保存到I[v_id]
         for i in range(V):
             # id为i的顶点在各层的第λ大的度
-            top_degree = mpc.sorted(Degree[:, i])[-lamb]
-            # ic(top_degree)
-            I[i] = top_degree
-        # I = await mpc.output(I)
+            I[i] = mpc.sorted(Degree[:, i])[-lamb]
+        I = await mpc.output(list(I))
+        ic(I)
         # core是最终要返回的结果, 但是也需要加密, 否则将不能输出
-        core = [[secint4(-1)] for _ in range(V - 1)]
+        core = [[secint(-1)] for _ in range(V - 1)]
         # 下面是根据k逐渐增大来依次淘汰顶点
         for k in range(V - 1):
             ic(f'---------{k}---------')
             # is_k: 哪些加密元素和k相同
-            is_k = seclist([k == top_d for top_d in I])
-            num_k = await mpc.output(mpc.sum(list(is_k)))
-            ic(num_k)
+            # is_k = seclist([k == top_d for top_d in I])
+            # num_k = await mpc.output(mpc.sum(list(is_k)))
+            # ic(num_k)
             # v_list: 哪些元素的top-d值等于k, 该数组的长度最后肯定会被得知, 所以直接设置成明文
             # 最后一个位置为填充位
-            v_list = seclist([-1 for _ in range(num_k + 1)],
-                             sectype=mpc.SecInt(4))
-            for i in range(len(is_k)):
-                # 如果该元素是k, 则将其写入列表下一个位置, 否则写到最后的填充位
-                # 遍历到i有几个True
-                count_k = mpc.sum(list(is_k[:i + 1]))
-                # 下个要赋值的索引
-                next_ix = mpc.if_else(is_k[i] == 1, count_k - 1, V)
-                v_list[next_ix] = secint4(i)
+            # v_list = seclist([-1 for _ in range(V + 1)], sectype=secint4)
+            # count_k = 0
+            # for i in range(V):
+            #     # 如果该元素是k, 则将其写入列表下一个位置, 否则写到最后的填充位
+            #     # 遍历到i有几个True
+            #     count_k = mpc.if_else(k == I[i], count_k + 1, count_k)
+            #     # 下个要赋值的索引
+            #     next_ix = mpc.if_else(k == I[i], count_k - 1, V)
+            #     v_list[next_ix] = i
+            # I中k值的个数, 需要保留的元素
+            v_list = seclist([mpc.if_else(top_d == k, v_id, -1)
+                             for v_id, top_d in enumerate(I)], secint4)
+            n = await mpc.output(v_list.count(-1))
             # 得到的v_list前l位不为0, 后面全为0, 截取前面不为0的位
-            v_list = v_list[:num_k]
+            v_list.sort()
+            del v_list[:n]
             v_list_out = await mpc.output(list(v_list))
             ic(v_list_out)
+            v_list = list(v_list)
             while v_list:
                 # 在每一层分别中去掉这个节点
                 v_id = v_list.pop(0)
                 ic(await mpc.output(v_id))
                 core[k].append(v_id)
-                # 每一方更新自己层的顶点的度, 返回修改过的节点和度, 再次input
+                # 每一方更新自己层的顶点的度, 返回v的邻居节点id, 再次input
+                v_id0 = await mpc.output(v_id)
                 updated = s_firmcore_mage.remove_node(
-                    context, mpc.pid, await mpc.output(v_id)).fields['updated']
-                assert isinstance(updated, dict)
-                # 所有需要修改I[id]的度, 每一层input为[节点id, 度, 节点id, 度]
-                secure_updated = []
-                if updated:
-                    # 不同的层之间传的节点可能有重复
-                    for u_id, degree in updated.items():
-                        if I[u_id] > k:
-                            secure_updated += [secint4(u_id), secint4(degree)]
-                # 将空数组传入mpc.input可能会报错, 所以至少传入一个元素
+                    context, mpc.pid, v_id0).fields['updated']
                 ic(updated)
-                if not secure_updated:
-                    secure_updated.append(secint4(-1))
-                # 各层更新了度的节点, 和更新之后的度
-                secure_updated = mpc.input(secure_updated)
-                # 所有需要修改I值的节点id(和层无关)
-                u_all_layer = []
+                assert isinstance(updated, set)
+
+                # 所有需要修改degree和I[v_id]的节点id
+                secure_updated = seclist(
+                    [mpc.if_else(I[u_id] > k, u_id, -1) for u_id in updated], secint4)
+                # 如果数组为空, 在后面的count函数中会报错
+                secure_updated.append(-1)
+                # 需要删除的元素
+                # ? 一直卡在这里(加了await)
+                # n = await mpc.output(secint(3))
+                if mpc.pid == 1:
+                    n = await mpc.output(secure_updated.count(-1))
+                    ic(n)
+                secure_updated.sort()
+                del secure_updated[:n]
+                # 不能使mpc.sum求和的数组为空, 至少填充一个元素
+                secure_updated.append(-1)
+                # seclist不能作为input, 转化为[secint...]
+                secure_updated = mpc.input(list(secure_updated))
+
+                # 所有需要修改I值的节点id(不区分层)
+                u_all_layer = seclist([], secint4)
                 for l, u_per_layer in enumerate(secure_updated):
                     # 每一个需要修改I的u_id
                     if len(u_per_layer) >= 2:
-                        assert len(u_per_layer % 2) == 0
-                        for i in range(len(u_per_layer) / 2):
+                        for u_id in u_per_layer:
                             # 首先需要先更新Degree矩阵
-                            u_id, degree = u_per_layer[i], u_per_layer[i + 1]
-                            Degree[l, u_id] = degree
-                            u_all_layer = mpc.if_else(
-                                degree == I[u_id] - 1, u_all_layer + [secint4(u_id)], u_all_layer)
+                            Degree[l, await mpc.output(u_id)] -= 1
+                            # * 不同的层之间传的节点可能有重复
+                            u_all_layer.append(mpc.if_else(Degree[l, u_id] == I[u_id] - 1 and
+                                                           not u_all_layer.contains(u_id), u_id, -1))
+
+                n = await mpc.output(u_all_layer.count(-1))
+                u_all_layer.sort()
+                # 删除前面n个值为-1的节点id
+                del u_all_layer[:n]
                 # 更新I
                 for u_id in u_all_layer:
-                    for i in range(V - 1):
-                        I[i] = mpc.if_else(u_id == secint4(i), mpc.sorted(
-                            Degree[:, u_id])[-lamb], I[i])  # 更新top-degree
+                    I[i] = mpc.sorted(Degree[:, u_id])[-lamb]  # 更新top-degree
         core = [await mpc.output(c) for c in core]
         ic(core)
 
