@@ -1,4 +1,6 @@
 from icecream import ic
 import numpy as np
 
-f = {1, 2, 3}
+a = [[1, 2, 3], [2, 3, 4]]
+a = np.array(a).T
+ic(a.tolist())
