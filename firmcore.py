@@ -179,5 +179,5 @@ if __name__ == '__main__':
     context = mgp.ProcCtx(G)
     core = firm_core(context, 2).fields['core']
     ic(core)
-    core_d = firm_d_core(context, 2).fields['core']
-    ic(core_d)
+    # core_d = firm_d_core(context, 2).fields['core']
+    # ic(core_d)

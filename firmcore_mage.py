@@ -1,4 +1,5 @@
 import mgp_mock as mgp
+import numpy as np
 from icecream import ic
 
 
@@ -70,14 +71,14 @@ def get_deg(v: mgp.Vertex) -> mgp.Record(deg=mgp.Nullable[int]):
 @mgp.read_proc
 # 获取整个图的邻接表
 # 每个第i个子数组属于顶点v, 格式为[[节点1的邻居1, 节点1的邻居2], [节点2的邻居1, 节点2的邻居2]...]
-def get_graph_adj(context: mgp.ProcCtx, layer) -> mgp.Record(adj_list=dict, deg_list=list):
+def get_adj_list(context: mgp.ProcCtx, layer) -> mgp.Record(adj_list=dict, deg_list=list):
     adj_dict = {}
     for v in context.graph.vertices:
         assert isinstance(v, mgp.Vertex)
         if int(v.properties['layer']) == layer:
             v_id = int(v.properties['id'])
             assert v_id not in adj_dict
-            adj_dict[v_id] = []
+            adj_dict[v_id] = [v_id]
             for e in v.in_edges:
                 adj_dict[v_id].append(int(e.from_vertex.properties['id']))
             for e in v.out_edges:
@@ -88,8 +89,30 @@ def get_graph_adj(context: mgp.ProcCtx, layer) -> mgp.Record(adj_list=dict, deg_
     adj_list = [None for _ in range(num_v)]  # 邻接表
     for v_id, neighbors in adj_dict.items():
         adj_list[v_id] = neighbors
-        deg_list[v_id] = len(neighbors)
+        deg_list[v_id] = len(neighbors) - 1  # 减去自己
     return mgp.Record(adj_list=adj_list, deg_list=deg_list)
+
+
+@mgp.read_proc
+# 获取整个图的邻接矩阵
+def get_adj_mat(context: mgp.ProcCtx, layer):
+    adj_dict = {}
+    for v in context.graph.vertices:
+        assert isinstance(v, mgp.Vertex)
+        if int(v.properties['layer']) == layer:
+            v_id = int(v.properties['id'])
+            assert v_id not in adj_dict
+            adj_dict[v_id] = [v_id]
+            for e in v.in_edges:
+                adj_dict[v_id].append(int(e.from_vertex.properties['id']))
+            for e in v.out_edges:
+                adj_dict[v_id].append(int(e.to_vertex.properties['id']))
+    num_v = len(adj_dict)
+    adj_mat = np.full([num_v, num_v], 0, dtype=int)
+    for v_id, neighbors in adj_dict.items():
+        for u_id in neighbors:
+            adj_mat[v_id, u_id] = 1
+    return mgp.Record(adj_mat=adj_mat)
 
 
 @mgp.read_proc

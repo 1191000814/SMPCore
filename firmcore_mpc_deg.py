@@ -9,7 +9,7 @@ from neo4j import GraphDatabase
 from mpyc.runtime import mpc
 from mpyc.seclists import seclist
 from icecream import ic
-from nx_graph import create_3layer_1
+from test_demo.nx_graph_test import create_3layer_1
 
 URI = "bolt://localhost:7687"
 AUTH = ('', '')
@@ -40,12 +40,12 @@ async def firmcore(lamb):
             B = [set() for _ in range(V - 1)]
             # 查询所有的度
             records, _, _ = client.execute_query(
-                f'CALL s_file_core.get_all_degree({mpc.pid}, {i})')
+                f'CALL s_file_core.get_all_deg({mpc.pid}, {i})')
             # 该层所有的度, list[V * int]
-            degree_list = records[0]['degree_list']
-            assert isinstance(degree_list, list)
+            deg_list = records[0]['deg_list']
+            assert isinstance(deg_list, list)
             # 换成安全类型, np.array(V, )
-            sec_degree_array = np.array([secint(d) for d in degree_list])
+            sec_degree_array = np.array([secint(d) for d in deg_list])
             # 从mpc.input到mpc.output之间的数据都是加密的,output之后就没有加密了
             # Degree指的是所有的度, np.array(V * L)
             Degree = mpc.input(sec_degree_array)
@@ -88,6 +88,7 @@ async def firmcore(lamb):
 
 
 # 上面函数的mock测试版本
+# 同时使用数据结构I和B
 async def firmcore_mock_degree1(lamb):
     G = create_3layer_1()
     context = mgp.ProcCtx(G)
@@ -101,14 +102,14 @@ async def firmcore_mock_degree1(lamb):
         # p[1]为SecInt(i), p[2]为所有Top-λ(deg(v))为i的节点id
         B = [[None, []] for _ in range(V - 1)]
         # 该层所有的度, list[V * int]
-        degree_list = firmcore_mage.get_all_degree(
-            context, mpc.pid).fields['degree_list']
-        assert isinstance(degree_list, list)
+        deg_list = firmcore_mage.get_all_deg(
+            context, mpc.pid).fields['deg_list']
+        assert isinstance(deg_list, list)
         # 换成安全类型, np.array(V, )
-        sec_degree_list = [secint(d) for d in degree_list]
+        sec_deg_list = [secint(d) for d in deg_list]
         # 从mpc.input到mpc.output之间的数据都是加密的,output之后就没有加密了
         # Degree指的是所有的度, np.array(V * L)
-        Degree = mpc.input(sec_degree_list)
+        Degree = mpc.input(sec_deg_list)
         Degree = np.array(Degree)
         # 在加密状态下求每个v第λ大的度
         for i in range(V - 1):
@@ -182,14 +183,14 @@ async def firmcore_mock_degree2_0(lamb):
     async with mpc:
         ic(f'{mpc.pid + 1} of {L} party')
         # 获取整个多层图的度矩阵
-        degree_list = firmcore_mage.get_all_degree(
-            context, mpc.pid).fields['degree_list']
-        assert isinstance(degree_list, list)
+        deg_list = firmcore_mage.get_all_deg(
+            context, mpc.pid).fields['deg_list']
+        assert isinstance(deg_list, list)
         # 换成安全类型的list
-        secure_degree_list = [secint(d)
-                              for d in degree_list] + [secint(PADDING)]
+        secure_deg_list = [secint(d)
+                           for d in deg_list] + [secint(PADDING)]
         # * 从mpc.input输出的数据都是加密的了, 因为获取了其他方的数据
-        Degree = np.array(mpc.input(secure_degree_list))
+        Degree = np.array(mpc.input(secure_deg_list))
         # Degree的[行]为层数, [列]为id
         Degree = [seclist(per_layer, secint4) for per_layer in Degree]
         # 每个顶点vertices对应的Top-λ(deg(vertices))
@@ -231,8 +232,8 @@ async def firmcore_mock_degree2_0(lamb):
                 ic(updated)
                 assert isinstance(updated, list)
                 # 所有需要修改degree和I[v_id]的节点id
-                secure_updated = seclist([mpc.if_else(I[u_id] > k, u_id, V)
-                                          for u_id in updated], secint4)
+                secure_updated = [mpc.if_else(I[u_id] > k, u_id, V)
+                                  for u_id in updated]
                 # 如果数组为空, 在后面的count函数中会报错
                 secure_updated.append(PADDING)
                 # 需要删除的元素
@@ -241,7 +242,7 @@ async def firmcore_mock_degree2_0(lamb):
                 secure_updated.append(PADDING)
                 # seclist不能作为input, 转化为[secint...]
                 # 各个层中修改过度的节点
-                secure_updated = mpc.input(list(secure_updated))
+                secure_updated = mpc.input(secure_updated)
                 ic(secure_updated)
                 # 所有需要修改I值的节点id(不区分层)
                 u_all_layer = seclist([], secint4)
@@ -281,16 +282,16 @@ async def firmcore_mock_degree2_1(lamb):
     context = mgp.ProcCtx(G)
     ic(f'{mpc.pid + 1} of {L} party')
     # 获取整个多层图的度矩阵
-    degree_list = s_firmcore_mage.get_all_degree(
-        context, mpc.pid).fields['degree_list']
-    assert isinstance(degree_list, list)
+    deg_list = firmcore_mage.get_all_deg(
+        context, mpc.pid).fields['deg_list']
+    assert isinstance(deg_list, list)
     # 换成安全类型的list
-    secure_degree_list = [secint(d)
-                          for d in degree_list] + [secint(PADDING)]
+    secure_deg_list = [secint(d)
+                       for d in deg_list] + [secint(PADDING)]
     # * 从mpc.input输出的数据都是加密的了, 因为获取了其他方的数据
     # Degree指的是所有的度, 形状为 (V + 1) * L, 最后一个数字用于填充
     await mpc.start()
-    Degree = np.array(mpc.input(secure_degree_list))
+    Degree = np.array(mpc.input(secure_deg_list))
     await mpc.shutdown()
     # 每个顶点vertices对应的Top-λ(deg(vertices))
     ic('创建数组I')
@@ -325,7 +326,7 @@ async def firmcore_mock_degree2_1(lamb):
             core[k].append(v_id)
             # 每一方更新自己层的顶点的度, 返回v的邻居节点id, 再次input
             v_id0 = await mpc.output(v_id)
-            updated = s_firmcore_mage.remove_node(
+            updated = firmcore_mage.remove_node(
                 context, mpc.pid, v_id0).fields['updated']
             ic(updated)
             assert isinstance(updated, list)
@@ -380,15 +381,15 @@ async def firmcore_mock_degree2_2(lamb):
     async with mpc:
         ic(f'{mpc.pid + 1} of {L} party')
         # 获取整个多层图的度矩阵
-        degree_list = s_firmcore_mage.get_all_degree(
-            context, mpc.pid).fields['degree_list']
-        assert isinstance(degree_list, list)
+        deg_list = firmcore_mage.get_all_deg(
+            context, mpc.pid).fields['deg_list']
+        assert isinstance(deg_list, list)
         # 换成安全类型的list
-        secure_degree_list = [secint(d)
-                              for d in degree_list] + [secint(PADDING)]
+        secure_deg_list = [secint(d)
+                           for d in deg_list] + [secint(PADDING)]
         # * 从mpc.input输出的数据都是加密的了, 因为获取了其他方的数据
         # Degree指的是所有的度, 形状为 (V + 1) * L, 最后一个数字用于填充
-        Degree = np.array(mpc.input(secure_degree_list))
+        Degree = np.array(mpc.input(secure_deg_list))
         # Degree的[行]为层数, [列]为id
         Degree = [seclist(per_layer, secint4) for per_layer in Degree]
         # 每个顶点vertices对应的Top-λ(deg(vertices))
@@ -419,7 +420,7 @@ async def firmcore_mock_degree2_2(lamb):
                 # 每一方更新自己层的顶点的度, 返回v的邻居节点id, 再次input
                 # v_id0 = await mpc.output(v_id)
                 ic('删除这次选中的节点, 并修改其邻居的度')
-                updated = s_firmcore_mage.remove_node(
+                updated = firmcore_mage.remove_node(
                     context, mpc.pid, v_id).fields['updated']
                 ic(updated)
                 assert isinstance(updated, list)
