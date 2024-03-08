@@ -29,9 +29,8 @@ class SecureNode:
 
 async def main():
     async with mpc:
-        I_copy = seclist([1, 2, 3], secint)
-        while I_copy:
-            a = I_copy.pop()
-            print(a)
+        ls = seclist([1, 2, 3], secint)
+        ic(await mpc.output(sum(ls)))
+
 
 mpc.run(main())

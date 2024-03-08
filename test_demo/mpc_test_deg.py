@@ -34,7 +34,7 @@ async def firmcore_mock_degree2_0(lamb):
         deg_list = get_degree(G)
         assert isinstance(deg_list, list)
         # 换成安全类型的list
-        deg_list = [secint(d) for d in deg_list]
+        deg_list = [secint(deg) for deg in deg_list]
         Degree = np.array(mpc.input(deg_list))
         # Degree的[行]为层数, [列]为id
         ic(len(Degree))

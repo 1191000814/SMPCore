@@ -63,9 +63,11 @@ def get_adj_mat(G: nx.MultiDiGraph):
     # 获取邻接矩阵
     V = 15  # 顶点数
     L = 3  # 层数
-    adj_mat = np.zeros([V, V])
-    for u, v in G.edges:
+    adj_mat = np.zeros([V, V], dtype=np.int8)
+    for u, v, k in G.edges:
+        # 无向图
         adj_mat[u][v] = 1
+        adj_mat[v][u] = 1
     return adj_mat
 
 
