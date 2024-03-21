@@ -26,7 +26,6 @@ def firm_core(MG: nx.MultiGraph, num_layers, lamb):
     # B[i]表示Top-λ(deg(vertices))为i的顶点有哪些, 因为度的最大值只能为num_nodes-1
     # B = [set() for _ in range(num_nodes - 1)]
     B = collections.defaultdict(set)
-
     # core-λ(vertices)
     # Core[k]表示在第k轮迭代时被移除的点
     core = collections.defaultdict(set)
