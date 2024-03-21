@@ -25,5 +25,4 @@ class SecureNode:
         p.next = SecureNode(value)
 
 
-a = seclist([SecureNode(1), SecureNode(2)], SecureNode)
-ic(a[secint(0)])
+ic(1, end=',')

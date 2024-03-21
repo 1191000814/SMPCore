@@ -30,7 +30,7 @@ class SecureNode:
 async def main():
     async with mpc:
         ls = seclist([1, 2, 3], secint)
+        ls[1] = 3
         ic(await mpc.output(sum(ls)))
-
 
 mpc.run(main())
