@@ -1,25 +1,97 @@
 from icecream import ic
 import networkx as nx
 import os
+import sys
 
 V = 15  # num of v
 L = 3  # num of l
 edges = [set() for _ in range(L)]
-edges[0].update({
-    (1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4),
-    (5, 6), (5, 7), (5, 8), (5, 9), (6, 7), (6, 8), (6, 9), (7, 8), (7, 9), (8, 9),
-    (10, 11), (10, 12), (10, 13), (10, 14), (11, 12), (11, 13), (11, 14), (12, 13), (13, 14)
-})
-edges[1].update({
-    (0, 1), (0, 3), (0, 4), (1, 3), (1, 4), (3, 4),
-    (5, 6), (5, 7), (5, 8), (5, 9), (6, 7), (6, 8), (6, 9), (7, 8), (7, 9),
-    (10, 11), (10, 12), (10, 13), (10, 14), (11, 12), (11, 13), (11, 14), (12, 13), (13, 14)
-})
-edges[2].update({
-    (0, 1), (0, 2), (0, 4), (1, 2), (1, 4), (2, 4),
-    (5, 8), (5, 9), (6, 7), (6, 8), (6, 9), (7, 8), (7, 9), (8, 9),
-    (10, 11), (10, 12), (10, 13), (10, 14), (11, 12), (11, 14), (12, 13), (12, 14), (13, 14)
-})
+edges[0].update(
+    {
+        (1, 2),
+        (1, 3),
+        (1, 4),
+        (2, 3),
+        (2, 4),
+        (3, 4),
+        (5, 6),
+        (5, 7),
+        (5, 8),
+        (5, 9),
+        (6, 7),
+        (6, 8),
+        (6, 9),
+        (7, 8),
+        (7, 9),
+        (8, 9),
+        (10, 11),
+        (10, 12),
+        (10, 13),
+        (10, 14),
+        (11, 12),
+        (11, 13),
+        (11, 14),
+        (12, 13),
+        (13, 14),
+    }
+)
+
+edges[1].update(
+    {
+        (0, 1),
+        (0, 3),
+        (0, 4),
+        (1, 3),
+        (1, 4),
+        (3, 4),
+        (5, 6),
+        (5, 7),
+        (5, 8),
+        (5, 9),
+        (6, 7),
+        (6, 8),
+        (6, 9),
+        (7, 8),
+        (7, 9),
+        (10, 11),
+        (10, 12),
+        (10, 13),
+        (10, 14),
+        (11, 12),
+        (11, 13),
+        (11, 14),
+        (12, 13),
+        (13, 14),
+    }
+)
+
+edges[2].update(
+    {
+        (0, 1),
+        (0, 2),
+        (0, 4),
+        (1, 2),
+        (1, 4),
+        (2, 4),
+        (5, 8),
+        (5, 9),
+        (6, 7),
+        (6, 8),
+        (6, 9),
+        (7, 8),
+        (7, 9),
+        (8, 9),
+        (10, 11),
+        (10, 12),
+        (10, 13),
+        (10, 14),
+        (11, 12),
+        (11, 14),
+        (12, 13),
+        (12, 14),
+        (13, 14),
+    }
+)
 
 
 def create_layer(l, di=False):
@@ -85,8 +157,10 @@ def create_by_file(name: str, di=False):
     layers = set()
     # 数据中的layer都是从1开始的
     num_layers = 0
-    path = os.path.expanduser(f'~/Secure-Graph/data/{name}.txt')
+
+    path = os.path.expanduser(f'../data/{name}.txt')
     with open(path, 'r', encoding='utf-8') as file:
+        next(file)  # 第一行是 层数/节点数
         for line in file:
             l, u, v = line.split()
             # 源节点,目标节点,层数
@@ -121,7 +195,12 @@ def create_layer_by_file(name: str, layer, di=False):
     edges = []
     layers = set()
     num_layers = 0
-    path = os.path.expanduser(f'~/Secure-Graph/data/{name}.txt')
+    #! 必须使用相对路径, 以免后面造成很多麻烦
+    project_dir = os.path.dirname(__file__)
+    path = os.path.join(project_dir, 'data', f'{name}.txt')
+    ic(path)
+    # path = os.path.expanduser(f'~/Secure-Graph/data/{name}.txt')
+    # path = f'../data/{name}.txt'
     with open(path, 'r', encoding='utf-8') as file:
         for line in file:
             l, u, v = line.split()

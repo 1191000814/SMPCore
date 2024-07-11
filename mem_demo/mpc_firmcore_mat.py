@@ -57,7 +57,7 @@ async def firmcore(lamb):
             ic(f'---------{k}---------')
             ic('获取I中值等于k的顶点')
             v_list = seclist([mpc.if_else(I[v_id] == k, v_id, pad_val)
-                              for v_id in range(num_nodes)], secint4)
+                              for v_id in range(num_nodes)], secint)
             v_list.sort()
             n = await mpc.output(v_list.count(pad_val))
             ic(n)

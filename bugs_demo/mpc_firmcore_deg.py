@@ -1,8 +1,9 @@
 # 暂时不使用图数据库, 而使用单独的图结构作为各方的数据源np
 # 无向图-smpc-firmcore算法
+# ? 异步函数可以调用非异步函数, 非异步函数不可以调用异步函数
+# ? 调用一个函数时, 不需要在被调用的函数中重复声明 'aysnc with mpc:'
 
 import numpy as np
-import networkx as nx
 from mpyc.runtime import mpc
 from mpyc.seclists import seclist
 from icecream import ic
@@ -13,208 +14,122 @@ import collections
 # 自己预先设置图的节点数和层数
 # V = 15
 # L = 3
-PADDING = -1  # 填充用的数字, 不和v_id重合, 且不超过最大数字范围
-
-secint4 = mpc.SecInt(16)
+pad_val = -1  # 填充用的数字, 不和v_id重合, 且不超过最大数字范围
 
 
-def secint(num):
-    # 返回加密的4-bit数字
-    return secint4(num)
+class FirmCore:
 
+    # __init__不能是异步函数
+    def __init__(self, lamb, dataset=None):
+        self.layer = mpc.pid  # 该层id
+        if dataset is None:  # 测试图数据
+            self.G = create_data.create_layer(self.layer)
+        else:  # 真实图数据
+            self.G = create_data.create_layer_by_file(dataset, mpc.pid)
+        self.lamb = lamb
+        self.num_layers = len(mpc.parties)  # 层数
+        ic(f'{self.layer + 1} of {self.num_layers} party')
+        self.num_nodes = self.G.number_of_nodes()  # 节点数
+        self.max_bit_len = self.num_nodes.bit_length()  # 临时确定的bit数, 后面需要改成最大度需要的bit数
+        ic(self.max_bit_len)
+        self.sec_int_type = mpc.SecInt(self.max_bit_len)
 
-async def firm_core(lamb):
-    # ? delete B, only use I
-    # I: 每个顶点vertices对应的Top-λ(deg(vertices))
-    async with mpc:
-        G = create_data.create_layer(mpc.pid)
-        assert (isinstance(G, nx.Graph))
-        num_layers = len(mpc.parties)  # 层数
-        num_nodes = G.number_of_nodes()  # 节点数
-        ic(f'{mpc.pid + 1} of {num_layers} party')
-        deg_list = utils.get_degree(G, num_nodes)  # 该层的节点的度列表
-        deg_list = [secint(deg) for deg in deg_list]  # 转化成安全矩阵
-        Degree = np.array(mpc.input(deg_list))  # 整个图的度矩阵
-        # Degree的[行]为层数, [列]为id
-        ic(len(Degree))
-        ic(len(Degree[0]))
-        Degree = [seclist(per_layer, secint4) for per_layer in Degree]
-        # 每个顶点vertices对应的Top-λ(deg(vertices))
-        ic('创建数组I')
-        I = seclist([-1 for _ in range(num_nodes)], secint4)
-        ic('初始化数组I为每个顶点第λ大的度')
-        for i in range(num_nodes):
-            # 每个id在各层的度
-            per_id = [Degree[l][i] for l in range(num_layers)]
-            # id为i的顶点在各层的第λ大的度
-            I[i] = mpc.sorted(per_id)[-lamb]
-        # output时必须是list形式
-        ic(await mpc.output(list(I)))
-        # core是最终要返回的结果, 但是也需要加密, 否则将不能输出
-        core = [[secint(PADDING)] for _ in range(num_nodes - 1)]
-        k = 0
-        counted = 0  # 已经计算了的顶点
-        while (k < num_nodes) and (counted < num_nodes):
-            ic(f'---------{k}---------')
-            v_list = seclist([mpc.if_else(I[v_id] == k, v_id, PADDING)
-                             for v_id in range(num_nodes)], secint4)
-            n = await mpc.output(v_list.count(PADDING))
-            # ic(n)
-            # 得到的v_list前l位不为0, 后面全为0, 截取前面不为0的位
-            v_list.sort()
-            del v_list[:n]
-            # v_list_out = await mpc.output(list(v_list))
-            # ic(v_list_out)
-            # ? 难点: 每次删除顶点, 更新度之后v_list也需要更新
-            while v_list:
-                # 在每一层分别中去掉这个节点
-                v_id = v_list.pop(0)
-                # ? 该节点的真实值在最后也将暴露给用户, 所以可以在该步解密
-                core[k].append(v_id)
-                counted += 1
-                # 每一方更新自己层的顶点的度, 返回v的邻居节点id, 再次input
-                v_id0 = await mpc.output(v_id)
-                G.remove_node(v_id0)
-                # 被移除节点的邻居节点集合
-                # ? 直接把所有的度再重新传一遍
-                deg_list = utils.get_degree(G, num_nodes)
-                deg_list = [secint(d) for d in deg_list]
-                Degree = np.array(mpc.input(deg_list))
-                # ic(Degree.shape)
-                # Degree的[行]为层数, [列]为id
-                Degree = [seclist(per_layer, secint4) for per_layer in Degree]
-                # 每个顶点vertices对应的Top-λ(deg(vertices))
-                # ic('更新数组I')
-                I = seclist([-1 for _ in range(num_nodes)], secint4)
-                for i in range(num_nodes):
-                    # 每个id在各层的度
-                    per_id = [Degree[l][i] for l in range(num_layers)]
-                    # id为i的顶点在各层的第λ大的度
-                    # 这里不需要考虑I[i]>k, 因为v_list只多不少
-                    I[i] = mpc.sorted(per_id)[-lamb]
-                for i in G.nodes:
-                    v_list.append(mpc.if_else((I[i] == k) & (
-                        v_list.count(i) == 0), i, PADDING))
-                if v_list:
-                    n = await mpc.output(v_list.count(PADDING))
-                    v_list.sort()
-                    del v_list[:n]
-                    # v_list_out = await mpc.output(list(v_list))
-                    # ic(v_list_out)
-                else:
+    def sec_int(self, num):
+        return self.sec_int_type(num)
+
+    async def firm_core_v2(self):
+        '''
+        修改版本2:
+        每次删除全部B[k]节点, 然后重新计算I和B
+        '''
+        async with mpc:
+            deg_list = utils.get_degree(self.G, self.num_nodes)  # 该层的节点的(明文)度列表
+            await self.set_sec_bit(deg_list)
+            remain_v = set([i for i in range(self.num_nodes)])  # 还没被移除的点
+            ic("init I, B")
+            # _, B = await self.get_IB_v2(deg_list, remain_v)
+            core = collections.defaultdict(set)
+            # 从0开始依次移除最小Top-d的顶点
+            for k in range(self.num_nodes):
+                if len(remain_v) == 0:
                     break
-            k += 1
-        core = [await mpc.output(c) for c in core]
-        ic(core)
+                ic(f"--------{k}-------")
+                _, B = await self.get_IB_v3(deg_list, remain_v, k)
+                while B[k]:
+                    # ic(I)
+                    # ic(B)
+                    # ic(v_id)
+                    core[k] = core[k] | B[k]
+                    remain_v = remain_v - B[k]
+                    ic(remain_v)
+                    # ? 修改本层的度后, 传递给其他方, 然后直接计算新的I和B, 不考虑哪些节点需要更新I与否
+                    self.G.remove_nodes_from(B[k])
+                    deg_list = utils.get_degree(self.G, self.num_nodes)
+                    # ic(deg_list)
+                    _, B = await self.get_IB_v3(deg_list, remain_v, k)
+        for k, nodes in core.items():
+            ic(k, len(nodes))
+
+    async def set_sec_bit(self, deg_list: list):
+        '''
+        设置安全类型bit数, (根据全局最大的度)
+        '''
+        # 获取全局最大的度
+        max_d = self.sec_int(max(deg_list))
+        max_d_list = mpc.input(max_d)
+        max_d_global: int = await mpc.output(mpc.max(max_d_list))
+        ic(max_d_global)
+        # 设置安全bit宽度
+        self.max_bit_len = self.num_nodes.bit_length()
+        # self.max_bit_len = max_d_global.bit_length()  # 修改安全整数bit数
+        ic(self.max_bit_len)
+        self.sec_int_type = mpc.SecInt(self.max_bit_len)
+
+    async def get_IB_v3(self, deg_list, remain_v, k=0):
+        '''
+        修改版本3:
+        思想同v2, 但是先计算全部I值, 再处理I[v_id]=k的v_id
+        '''
+        ic("get local degree list")
+        deg_list = [self.sec_int(deg) for deg in deg_list]  # 转化成安全矩阵
+        # Degree的[行]为层数, [列]为id
+        ic("get all degree list")
+        Degree = np.array(mpc.input(deg_list))  # 整个图的度矩阵
+        # 原id -> 新(连续)id
+        id2seq = {v_id: i for i, v_id in enumerate(remain_v)}
+        # 新(连续)id -> 原id
+        seq2id = {i: v_id for i, v_id in enumerate(remain_v)}
+        I_seq = seclist([pad_val for _ in range(len(remain_v))], self.sec_int_type)
+        ic("compute I")
+        # ? 和v1一样先计算全部的密文I
+        for v_id in remain_v:
+            # 每个id在各层的度
+            v_seq = id2seq[v_id]
+            per_id = [Degree[l][v_id] for l in range(self.num_layers)]
+            # id为i的顶点在各层的第λ大的度
+            I_seq[v_seq] = mpc.sorted(per_id)[-self.lamb]
+        # ic(await mpc.output(list(I_seq)))
+        ic("select v_seq | I[v_seq] <= k")
+        # 这个循环可以隐式表示
+        nodes_k = seclist([], self.sec_int_type)
+        for v_seq, I_k in enumerate(I_seq):
+            nodes_k.append(mpc.if_else(I_k <= k, v_seq, pad_val))
+        #! nodes_k可能为空
+        if len(nodes_k) > 0:
+            count_pad = await mpc.output(nodes_k.count(pad_val))
+            nodes_k.sort()
+            del nodes_k[:count_pad]
+        # ? 明文计算I中的内容
+        ic("get plaintext node_k")
+        ic(len(nodes_k))
+        nodes_k = await mpc.output(list(nodes_k))
+        # 新id -> 原id
+        nodes_k = [seq2id[i] for i in nodes_k]
+        # ic(nodes_k)
+        B = collections.defaultdict(set)
+        B[k] = set(nodes_k)
+        return [], B
 
 
-async def firm_core_mod(lamb, data_name=None):
-    # ? 仅保护Degree的度不被泄露, 中间结果I可以被各方知道
-    async with mpc:
-        if data_name is None:
-            G = create_data.create_layer(mpc.pid)  # 该计算方的单层图
-        else:
-            G = create_data.create_layer_by_file(data_name, mpc.pid)
-        assert (isinstance(G, nx.Graph))
-        num_layers = len(mpc.parties)  # 层数
-        num_nodes = G.number_of_nodes()  # 节点数
-        l0 = mpc.pid  # 改层id
-        ic(f'{l0 + 1} of {num_layers} party')
-        deg_list = utils.get_degree(G, num_nodes)  # 该层的节点的度列表
-        remain_v = set([i for i in range(num_nodes)])  # 还没被移除的点
-        update_v = set()  # 本轮需要修改I值的顶点
-        ic('init I, B')
-        I, B = await get_IB(deg_list, lamb, remain_v)
-        core = collections.defaultdict(set)
-        # 从0开始依次移除最小Top-d的顶点
-        for k in range(num_nodes):
-            ic(f'--------{k}------')
-            while B[k]:
-                # ic(I)
-                ic(B)
-                v_id = B[k].pop()
-                # ic(v_id)
-                core[k].add(v_id)
-                remain_v.remove(v_id)
-                # 移除v后, 将需要修改top_d的顶点存储在N中
-                for u_id, _ in G[v_id].items():
-                    deg_list[u_id] -= 1
-                    if deg_list[u_id] == I[u_id] - 1 and I[u_id] > k:
-                        update_v.add(u_id)
-                if len(update_v) == 0:
-                    update_v.add(-1)
-                await update_IB(deg_list, lamb, update_v, I, B)
-        ic(core)
-
-
-async def get_IB(deg_list: list, lamb, remain_v):
-    '''
-    初始化I和B
-    根据当前层的度矩阵, 获取整个多层图的B结构
-    '''
-    num_nodes = len(deg_list)
-    ic('get local degree list')
-    deg_list = [secint(deg) for deg in deg_list]  # 转化成安全矩阵
-    # Degree的[行]为层数, [列]为id
-    ic('get all degree list')
-    Degree = np.array(mpc.input(deg_list))  # 整个图的度矩阵
-    # 每个顶点vertices对应的Top-λ(deg(vertices))
-    num_layers = len(Degree)
-    I = [-1 for _ in range(num_nodes)]
-    ic('compute I')
-    for i in range(num_nodes):
-        # 每个id在各层的度
-        per_id = [Degree[l][i] for l in range(num_layers)]
-        # id为i的顶点在各层的第λ大的度
-        I[i] = mpc.sorted(per_id)[-lamb]
-    # ? 明文计算I中的内容
-    ic('show plaintext I')
-    I = await mpc.output(I)
-    # ? 既然I是明文的, 那么也可以有B
-    B = collections.defaultdict(set)
-    ic(I)
-    ic(B)
-    # 只计算剩余节点, 添加进B
-    ic('compute B')
-    for v_id in remain_v:
-        # id为i的顶点在各层的第λ大的度
-        B[I[v_id]].add(v_id)
-    return I, B
-
-
-async def update_IB(deg_list: list, lamb, update_v, I, B):
-    '''
-    根据当前层的度矩阵, 获取整个多层图的B结构
-    '''
-    # ? 在mod1的基础上进行修改, 不重新计算所有的I的值, 只计算必须修改I值节点的I值
-    num_nodes = len(deg_list)
-    ic('get local degree list')
-    deg_list = [secint(deg) for deg in deg_list]  # 转化成安全矩阵
-    # Degree的[行]为层数, [列]为id
-    ic('get all degree list')
-    Degree = np.array(mpc.input(deg_list))  # 整个图的度矩阵
-    # 每个顶点vertices对应的Top-λ(deg(vertices))
-    num_layers = len(Degree)
-    ic('collect all v need to be updated')
-    I = [-1 for _ in range(num_nodes)]
-    all_update_v = mpc.input([secint(v_id) for v_id in update_v])  # 各层需要改变I的节点
-    ic(len(all_update_v))
-    ic(all_update_v)
-    all_update_v = [v_id for per_layer in all_update_v for v_id in per_layer]  # 全放到一个列表里
-    ic(len(all_update_v))
-    ic(all_update_v)
-    all_update_v = set(await mpc.output(all_update_v))  # 明文后用集合表示
-    all_update_v.remove(-1)
-    ic(all_update_v)
-    ic('compute I and B')
-    # ? 明文计算I中的内容
-    for v_id in all_update_v:
-        # 每个id在各层的度
-        per_id = [Degree[l][v_id] for l in range(num_layers)]
-        # id为i的顶点在各层的第λ大的度
-        B[I[v_id]].remove(v_id)
-        I[v_id] = await mpc.output(mpc.sorted(per_id)[-lamb])
-        B[I[v_id]].add(v_id)
-
-if __name__ == '__main__':
-    mpc.run(firm_core_mod(2, None))
+if __name__ == "__main__":
+    core = mpc.run(FirmCore(2, 'sacchcere').firm_core_v2())

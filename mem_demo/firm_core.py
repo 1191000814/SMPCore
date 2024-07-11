@@ -43,7 +43,7 @@ def firm_core(MG: nx.MultiGraph, num_layers, lamb):
     # ic(B)
     # 从0开始依次移除最小Top-d的顶点
     for k in range(num_nodes - 1):
-        # print(f'-------------{k}--------------')
+        # ic(f'-------------{k}--------------')
         while B[k]:
             v_id = B[k].pop()
             # ic(v_id)
@@ -85,13 +85,14 @@ def firm_core_mod1(MG: nx.MultiGraph, num_layers, lamb):
     B = get_IB(MG, num_nodes, 0, lamb)
     # 从0开始依次移除最小Top-d的顶点
     for k in range(num_nodes):
-        # print(f'-------------{k}--------------')
+        # ic(f'-------------{k}--------------')
         while B[k]:
             # ic(B)
             # ? 需要删除任何I值[不大于k]的顶点, 而不是等于k的顶点
             core[k] = core[k] | B[k]
             # 重新计算I和B
             MG.remove_nodes_from(B[k])
+            ic(MG.number_of_nodes())
             # 更新需要更新的邻居的值
             B = get_IB(MG, num_nodes, k, lamb)
     t_end = time.time()
@@ -118,11 +119,11 @@ def get_IB(MG: nx.MultiGraph, num_nodes, k, lamb):
 
 if __name__ == '__main__':
     # MG = create_data.create_graph()
-    MG, num_layers = create_data.create_by_file('sanremo')
+    MG, num_layers = create_data.create_by_file('sacchcere')
     core = firm_core(MG, num_layers, 2)
     for k in core.keys():
         ic(k, len(core[k]))
-    MG, num_layers = create_data.create_by_file('sanremo')
+    MG, num_layers = create_data.create_by_file('sacchcere')
     core = firm_core_mod1(MG, num_layers, 2)
     for k in core.keys():
         ic(k, len(core[k]))

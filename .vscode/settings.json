@@ -1,5 +1,4 @@
 {
-    "code-runner.runInTerminal": true,
     "code-runner.executorMap": {
         "javascript": "node",
         "java": "cd $dir && javac $fileName && java $fileNameWithoutExt",
@@ -53,6 +52,134 @@
         "fortran_fixed-form": "cd $dir && gfortran $fileName -o $fileNameWithoutExt && $dir$fileNameWithoutExt",
         "fortran": "cd $dir && gfortran $fileName -o $fileNameWithoutExt && $dir$fileNameWithoutExt",
         "sml": "cd $dir && sml $fileName",
-        "mojo": "mojo run"
-    }
+        "mojo": "mojo run",
+        "erlang": "escript",
+        "spwn": "spwn build",
+        "pkl": "cd $dir && pkl eval -f yaml $fileName -o $fileNameWithoutExt.yaml",
+        "gleam": "gleam run -m $fileNameWithoutExt"
+    },
+    "code-runner.defaultLanguage": "cpp",
+    "code-runner.saveFileBeforeRun": true,
+    "code-runner.runInTerminal": true,
+    "terminal.integrated.cursorStyle": "line",
+    "terminal.integrated.cursorBlinking": true,
+    "security.workspace.trust.untrustedFiles": "open",
+    "files.autoGuessEncoding": true,
+    "editor.formatOnSave": true,
+    "files.autoSave": "afterDelay",
+    "editor.detectIndentation": false,
+    "terminal.integrated.enableMultiLinePasteWarning": "never",
+    "editor.showUnused": true,
+    "editor.foldingStrategy": "indentation",
+    "editor.fontFamily": "JetBrains Mono NL, 'Courier New', monospace",
+    "window.zoomLevel": 0.3,
+    "editor.fontSize": 13,
+    "editor.rulers": [
+        120
+    ],
+    "editor.wrappingIndent": "indent",
+    "editor.wordWrap": "bounded",
+    "editor.wordWrapColumn": 120,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "editor.selectionHighlight": true,
+    "workbench.colorCustomizations": {
+        "editorUnnecessaryCode.border": "#e1cfcfd9"
+    },
+    "editor.tokenColorCustomizations": {
+        "[Ayu Mirage Bordered]": {
+            "comments": {
+                "fontStyle": ""
+            },
+            "types": "#2f7cd4",
+            "keywords": "#bac520",
+            "strings": {
+                "foreground": "#8bbd5a"
+            },
+            "functions": "#beec4f",
+            "textMateRules": [
+                {
+                    "scope": "keyword.control", // if ,else, try 等控制符
+                    "settings": {
+                        "foreground": "#3da369"
+                    }
+                },
+                {
+                    "scope": "variable.other.property",
+                    "settings": {
+                        "foreground": "#5fa4da"
+                    }
+                },
+                {
+                    "scope": "string.regexp",
+                    "settings": {
+                        "foreground": "#7bb4e0"
+                    }
+                }
+            ]
+        }
+    },
+    "editor.fontLigatures": false,
+    "terminal.integrated.profiles.linux": {
+        "zsh (login)": {
+            "path": "zsh",
+            "args": [
+                "-l"
+            ]
+        }
+    },
+    "workbench.colorTheme": "Ayu Mirage Bordered",
+    "[cpp]": {
+        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+    },
+    "python.analysis.inlayHints.pytestParameters": true,
+    "python.analysis.inlayHints.callArgumentNames": "all",
+    "python.analysis.completeFunctionParens": true,
+    "python.analysis.autoFormatStrings": true,
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnSave": true,
+        "editor.autoClosingBrackets": "languageDefined",
+        "editor.minimap.maxColumn": 120,
+    },
+    // black formatter格式化配置
+    "black-formatter.args": [
+        "--line-length=120",
+        "--skip-string-normalization"
+    ],
+    // "autopep8.args": [
+    //     "--max-line-length=120"
+    // ],
+    // "prettier.printWidth": 120,
+    // "prettier.tabWidth": 4,
+    "output.smartScroll.enabled": false,
+    "files.trimTrailingWhitespace": true,
+    // "[git-commit]": {
+    //     "editor.wordWrap": "wordWrapColumn"
+    // },
+    "python.analysis.inlayHints.functionReturnTypes": true,
+    // C/C++
+    "[c]": {
+        // "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+    },
+    // 如果C/C++已经有默认的全局格式化文件.clang-format了, 那么不需要在这里再配置
+    "C_Cpp.clang_format_style": "{ BasedOnStyle: Google, IndentWidth: 4, BreakBeforeBraces: Attach, ColumnLimit: 120}",
+    "C_Cpp.autocompleteAddParentheses": true,
+    "C_Cpp.default.cppStandard": "c++17",
+    "C_Cpp.default.cStandard": "c17",
+    "remote.autoForwardPortsSource": "hybrid",
+    "workbench.iconTheme": "helium-icon-theme",
+    "C_Cpp.intelliSenseEngineFallback": "enabled",
+    "path-intellisense.absolutePathToWorkspace": true,
+    // "clangd.fallbackFlags": [
+    //     "-std=c++17",
+    //     "-I",
+    //     "${workspaceFolder}"
+    // ]
+    // golang
+    "gopls": {
+        "ui.semanticTokens": true
+    },
+    "explorer.confirmDragAndDrop": false
 }

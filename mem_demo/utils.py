@@ -1,6 +1,7 @@
 import networkx as nx
 import numpy as np
-from icecream import ic
+
+# from icecream import ic
 
 
 def get_degree(G: nx.Graph, V):
