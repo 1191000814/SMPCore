@@ -42,11 +42,15 @@ def firm_core(MG: nx.MultiGraph, num_layers, lamb):
     # ic(I)
     # ic(B)
     # 从0开始依次移除最小Top-d的顶点
+    count = 0
     for k in range(num_nodes - 1):
-        # ic(f'-------------{k}--------------')
+        if count == num_nodes:
+            break
+        ic(f'-------------{k}--------------')
         while B[k]:
             v_id = B[k].pop()
-            # ic(v_id)
+            ic(v_id)
+            count += 1
             core[k].add(v_id)
             # 移除v后, 将需要修改top_d的顶点存储在N中
             N = set()
@@ -84,15 +88,20 @@ def firm_core_mod1(MG: nx.MultiGraph, num_layers, lamb):
     core = collections.defaultdict(set)
     B = get_IB(MG, num_nodes, 0, lamb)
     # 从0开始依次移除最小Top-d的顶点
+    count = 0
     for k in range(num_nodes):
-        # ic(f'-------------{k}--------------')
+        if count == num_nodes:
+            break
+        ic(f'-------------{k}--------------')
         while B[k]:
             # ic(B)
             # ? 需要删除任何I值[不大于k]的顶点, 而不是等于k的顶点
             core[k] = core[k] | B[k]
+            ic(B[k])
             # 重新计算I和B
             MG.remove_nodes_from(B[k])
-            ic(MG.number_of_nodes())
+            count += len(B[k])
+            # ic(MG.number_of_nodes())
             # 更新需要更新的邻居的值
             B = get_IB(MG, num_nodes, k, lamb)
     t_end = time.time()
@@ -119,11 +128,17 @@ def get_IB(MG: nx.MultiGraph, num_nodes, k, lamb):
 
 if __name__ == '__main__':
     # MG = create_data.create_graph()
-    MG, num_layers = create_data.create_by_file('sacchcere')
+    MG, num_layers = create_data.create_by_file('ADHD', 3)
     core = firm_core(MG, num_layers, 2)
-    for k in core.keys():
-        ic(k, len(core[k]))
-    MG, num_layers = create_data.create_by_file('sacchcere')
+    total_num = 0
+    for k, nodes in core.items():
+        total_num += len(nodes)
+        ic(k, len(nodes))
+    ic(total_num)
+    MG, num_layers = create_data.create_by_file('ADHD', 3)
     core = firm_core_mod1(MG, num_layers, 2)
-    for k in core.keys():
-        ic(k, len(core[k]))
+    total_num = 0
+    for k, nodes in core.items():
+        total_num += len(nodes)
+        ic(k, len(nodes))
+    ic(total_num)

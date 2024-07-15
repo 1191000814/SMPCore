@@ -1,7 +1,6 @@
 from icecream import ic
 import networkx as nx
 import os
-import sys
 
 V = 15  # num of v
 L = 3  # num of l
@@ -142,9 +141,10 @@ def create_graph(di=False):
     return MG
 
 
-def create_by_file(name: str, di=False):
+def create_by_file2(name: str, di=False):
     '''
     从文件路径创建多层图
+    假设layer id和node id没有严格按1-n表示(实际上是严格按照该规则表示的)
     '''
     if name is None:
         return create_graph(di), 3
@@ -155,7 +155,7 @@ def create_by_file(name: str, di=False):
     nodes = set()
     edges = []
     layers = set()
-    # 数据中的layer都是从1开始的
+    # 数据集中的layer都是从1开始到n的
     num_layers = 0
 
     project_dir = os.path.dirname(os.path.dirname(__file__))
@@ -179,6 +179,52 @@ def create_by_file(name: str, di=False):
         layers_map = {layer: i for i, layer in enumerate(layers)}
         MG.add_nodes_from(nodes_map.values())
         MG.add_edges_from([(nodes_map[u], nodes_map[v], layers_map[layer]) for u, v, layer in edges])
+    ic(MG.number_of_nodes())
+    ic(MG.number_of_edges())
+    ic(num_layers)
+    return MG, num_layers
+
+
+def create_by_file(name: str, get_num_layer=None, di=False):
+    '''
+    从文件路径创建多层图
+    get_num_layer是取前多少层, None表示取所有层
+    '''
+    if name is None:
+        return create_graph(di), 3
+    if di:  # 有向图
+        MG = nx.MultiDiGraph()
+    else:  # 无向图
+        MG = nx.MultiGraph()
+    edges = []
+    # 数据集中的layer都是从1开始到n的
+    num_layers = 0
+    num_nodes = 0
+    project_dir = os.path.dirname(os.path.dirname(__file__))
+    path = os.path.join(project_dir, 'data', f'{name}.txt')
+    ic(path)
+    with open(path, 'r', encoding='utf-8') as file:
+        next(file)  # 第一行是 总层数/总节点数
+        for line in file:
+            l, u, v = line.split()
+            # 源节点,目标节点,层数
+            # ? 节点, 层数一定是严格按照1-num_v排列的
+            u, v, l = int(u) - 1, int(v) - 1, int(l) - 1
+            num_layers = max(l + 1, num_layers)
+            num_nodes = max(u + 1, v + 1, num_nodes)
+            edges.append([u, v, l])
+        if get_num_layer is None:  # 取全部层
+            MG.add_nodes_from([node_id for node_id in range(num_nodes)])
+            MG.add_edges_from([(u, v, l) for u, v, l in edges])
+        else:
+            if get_num_layer <= num_layers:
+                MG.add_nodes_from([node_id for node_id in range(num_nodes)])
+                MG.add_edges_from([(u, v, l) for u, v, l in edges if l < get_num_layer])
+            else:
+                MG.add_nodes_from([node_id for node_id in range(num_nodes)])
+                MG.add_edges_from([(u, v, l) for u, v, l in edges])
+                get_num_layer = num_layers
+
     ic(MG.number_of_nodes())
     ic(MG.number_of_edges())
     ic(num_layers)
@@ -227,3 +273,10 @@ def create_layer_by_file(name: str, layer, di=False):
     ic(G.number_of_nodes())
     ic(G.number_of_edges())
     return G
+
+
+# 测试数据集的创建
+if __name__ == '__main__':
+    MG, num_layers = create_by_file('sacchcere', 4)
+    ic(MG.number_of_nodes())
+    ic(MG.number_of_edges())

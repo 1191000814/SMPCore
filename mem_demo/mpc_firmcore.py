@@ -18,7 +18,7 @@ import argparse
 # V = 15
 # L = 3
 pad_val = -1  # 填充用的数字, 不和v_id重合, 且不超过最大数字范围
-
+common_lambda = 2
 
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('--dataset', '-d', help='选择哪一个数据集(1-4)进行实验')
@@ -132,7 +132,7 @@ class FirmCore:
     async def firm_core_v1(self):
         '''
         修改版本1:
-        不再保证整个计算过程中的节点都加密, 仅仅保证每一层最原始的数据(度列表)是加密的, 后续的步骤使用明文计算
+        不再保证整个计算过程中的节点都加密, 仅仅保证每一层最原始的数据(度列表)是加密的, 后续的步骤使用明文计算\n
         迭代过程中, 一个一个地删除迭代B[k]中的节点
         '''
         async with mpc:
@@ -148,16 +148,16 @@ class FirmCore:
                 if len(remain_v) == 0:
                     break
                 ic(f"--------{k}-------")
-                ic(time() - start_time)
+                # ic(time() - start_time)
                 while B[k]:
                     # ic(I)
                     # ic(B)
                     v_id = B[k].pop()
-                    # ic(v_id)
-                    ic(len(remain_v))
+                    ic(v_id)
+                    # ic(len(remain_v))
                     core[k].add(v_id)
                     remain_v.remove(v_id)
-                    # 移除v后, 将需要修改top_d的顶点存储在N中
+                    # 移除v后, 将需要修改I的顶点存储在N中
                     update_v = set()  # ! 本轮需要修改I值的顶点, 每轮都需要更新
                     # ? 需要考虑所有层中一共有哪些节点需要更新
                     for u_id in set(self.G.neighbors(v_id)) & remain_v:
@@ -166,14 +166,17 @@ class FirmCore:
                             update_v.add(u_id)
                     # ic(update_v)
                     await self.update_IB(deg_list, list(update_v), I, B)
-                    ic(time() - start_time)
+                    # ic(time() - start_time)
+        total_num = 0
         for k, nodes in core.items():
+            total_num += len(nodes)
             ic(k, len(nodes))
+        ic(total_num)
 
     async def firm_core_v2(self):
         '''
         修改版本2:
-        每次删除全部B[k]节点, 然后重新计算I和B
+        每次迭代删除全部B[k]节点, 然后重新计算I和B
         '''
         async with mpc:
             start_time = time()
@@ -188,7 +191,7 @@ class FirmCore:
                 if len(remain_v) == 0:
                     break
                 ic(f"--------{k}-------")
-                ic(time() - start_time)
+                # ic(time() - start_time)
                 _, B = await self.get_IB(deg_list, remain_v, k)
                 while B[k]:
                     # ic(I)
@@ -197,16 +200,19 @@ class FirmCore:
                     assert len(core[k] & B[k]) == 0
                     core[k] = core[k] | B[k]
                     remain_v = remain_v - B[k]
-                    ic(len(remain_v))
-                    # 移除v后, 将需要修改top_d的顶点存储在N中
+                    # ic(len(remain_v))
+                    # 移除v后, 将需要修改I的顶点存储在N中
                     # update_v = set()
                     # ? 修改本层的度后, 传递给其他方, 然后直接计算新的I和B, 不考虑哪些节点需要更新I与否
                     self.G.remove_nodes_from(B[k])
                     deg_list = utils.get_degree(self.G, self.num_nodes)
                     _, B = await self.get_IB(deg_list, remain_v, k)
-                    ic(time() - start_time)
+                    # ic(time() - start_time)
+        total_num = 0
         for k, nodes in core.items():
+            total_num += len(nodes)
             ic(k, len(nodes))
+        ic(total_num)
 
     async def firm_core_v3(self):
         '''
@@ -264,8 +270,11 @@ class FirmCore:
                         await self.update_IB(deg_list, list(update_v), I, B)
                         ic(time() - start_time)
                         pass
+        total_num = 0
         for k, nodes in core.items():
+            total_num += len(nodes)
             ic(k, len(nodes))
+        ic(total_num)
 
     async def set_sec_bit(self, deg_list: list):
         '''
@@ -319,7 +328,6 @@ class FirmCore:
         # ? 既然I是明文的, 那么也可以有B
         B = collections.defaultdict(set)
         # 只计算剩余节点, 添加进B
-        ic("compute B")
         for v_id in remain_v:
             # id为i的顶点在各层的第λ大的度
             B[max(I[v_id], k)].add(v_id)
@@ -434,13 +442,11 @@ class FirmCore:
         # ic("get local degree list")
         deg_list = [self.sec_int(deg) for deg in deg_list]  # 转化成安全矩阵
         # Degree的[行]为层数, [列]为id
-        # Degree = np.array(mpc.input(deg_list))  # 整个图的度矩阵
         Degree = mpc.input(deg_list)  # [[layer1], [layer2]...[layern]]
         Degree = [mpc.np_fromlist(deg_layer) for deg_layer in Degree]  # [np.array1, np.array2...]
         Degree = np.vstack(Degree)
         #! 这里需要使得每个mpc.input的数量都相等
         update_nums = mpc.input(self.sec_int(len(update_v)))  # 单层图需要修改I的数量
-
         max_update_num = await mpc.output(mpc.max(update_nums))  # 各层中最大需要修改的数量
         if max_update_num == 0:  # 传入的长度至少为1
             max_update_num = 1
@@ -449,12 +455,6 @@ class FirmCore:
         # ic(len(all_update_v))
         # ic(all_update_v)
         all_update_v = [v_id for per_layer in all_update_v for v_id in per_layer]  # 全放到一个列表里, 但可能有重复
-        # mpc.sorted(all_update_v)
-        # mpc.find()
-        # count_pad = mpc.output(all_update_v.sort(pad_val))
-        # ic(len(all_update_v))
-        # ic(all_update_v)
-
         all_update_v = set(await mpc.output(all_update_v))  # 明文后用集合表示
         #! pad_val有可能不存在
         all_update_v.discard(pad_val)
@@ -462,7 +462,7 @@ class FirmCore:
         # ic(all_update_v)
         # ic("update I and B")
         if all_update_v:
-            I_update = mpc.np_tolist(np.sort(Degree[:, all_update_v], axis=0)[self.lamb, :])
+            I_update = mpc.np_tolist(np.sort(Degree[:, all_update_v], axis=0)[-self.lamb, :])
             I_update = await mpc.output(I_update, receivers=None)
             # ? 明文计算I中的内容
             for i, v_id in enumerate(all_update_v):
@@ -475,6 +475,7 @@ class FirmCore:
         """
         修改版本1, 每次收集了所有需要更新的(加密)节点id后, 先去掉其中的重复和填充节点, 再decode, 以减少需要decode的数组长度
         而不是先decode, 再处理节点id问题
+        ! 似乎没有必要?
         """
         # ? 在上面函数的基础上进行修改, 不重新计算所有的I的值, 只计算必须修改I值节点的I值
 
@@ -541,11 +542,17 @@ if __name__ == "__main__":
         dataset = 'sanremo'
     elif args.dataset == '4':
         dataset = 'slashdot'
+    elif args.dataset == '5':
+        dataset = 'ADHD'
+    elif args.dataset == '6':
+        dataset = 'FAO'
+    elif args.dataset == '7':
+        dataset = 'RM'
     else:  # 自制测试数据集
         dataset = None
     if args.version == '1':
-        mpc.run(FirmCore(2, dataset).firm_core_v1())
+        mpc.run(FirmCore(common_lambda, dataset).firm_core_v1())
     elif args.version == '2':
-        mpc.run(FirmCore(2, dataset).firm_core_v2())
+        mpc.run(FirmCore(common_lambda, dataset).firm_core_v2())
     elif args.version == '3':
-        mpc.run(FirmCore(2, dataset).firm_core_v3())
+        mpc.run(FirmCore(common_lambda, dataset).firm_core_v3())
