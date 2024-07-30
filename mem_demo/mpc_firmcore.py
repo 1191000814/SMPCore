@@ -232,7 +232,7 @@ class FirmCore:
                 if len(remain_v) == 0:
                     break
                 ic(f"--------{k}-------")
-                ic(time() - start_time)
+                # ic(time() - start_time)
                 I, B = await self.get_IB(deg_list, remain_v, k)
                 phase = True  # 处于哪一阶段, 批量True/逐个False
                 while B[k]:
@@ -244,19 +244,19 @@ class FirmCore:
                         n = len(B[k])
                         core[k] = core[k] | B[k]
                         remain_v = remain_v - B[k]
-                        ic(len(remain_v))
+                        # ic(len(remain_v))
                         # ? 修改本层的度后, 传递给其他方, 然后直接计算新的I和B, 不考虑哪些节点需要更新I与否
                         self.G.remove_nodes_from(B[k])
                         deg_list = utils.get_degree(self.G, self.num_nodes)
                         I, B = await self.get_IB(deg_list, remain_v, k)
-                        ic(time() - start_time)
-                        if n <= 2:
+                        # ic(time() - start_time)
+                        if n <= 1:
                             phase = False
                     # 第二阶段: 逐个删除节点, 每次只重新计算指定节点的I/B
                     else:
                         v_id = B[k].pop()
                         # ic(v_id)
-                        ic(len(remain_v))
+                        # ic(len(remain_v))
                         core[k].add(v_id)
                         remain_v.remove(v_id)
                         # 移除v后, 将需要修改top_d的顶点存储在N中
@@ -268,13 +268,15 @@ class FirmCore:
                                 update_v.add(u_id)
                         # ic(update_v)
                         await self.update_IB(deg_list, list(update_v), I, B)
-                        ic(time() - start_time)
+                        # ic(time() - start_time)
                         pass
         total_num = 0
         for k, nodes in core.items():
             total_num += len(nodes)
             ic(k, len(nodes))
         ic(total_num)
+
+    # 下面是工具函数
 
     async def set_sec_bit(self, deg_list: list):
         '''
@@ -339,6 +341,7 @@ class FirmCore:
         不用再将remain_id映射到连续整数了
         """
         # ! 因为每次明文都需要等待密文排序全部完成, 所以肯定不如上面函数
+        # ! 这样的优化没什么实际意义
         ic("get local degree list")
         deg_list = [self.sec_int(deg) for deg in deg_list]  # 转化成安全矩阵
         # Degree的[行]为层数, [列]为id
@@ -363,9 +366,9 @@ class FirmCore:
             B[max(I[v_id], k)].add(v_id)
         return I, B
 
-    async def get_IB_v2(self, deg_list, remain_v, k=0):
+    async def get_IB_v3(self, deg_list, remain_v, k=0):
         '''
-        修改版本2:
+        修改版本3:
         在firm_core_v2中, 每次遍历只用到了B[k]的值, 那么B的其他值可以不即时更新, 节省计算量
         依次I值的密文, 将I[v_id]=k的值加入数组nodes_k中, 同时计算nodes_k的有效长度, 最后只decode有效的nodes_k
         '''
@@ -397,10 +400,10 @@ class FirmCore:
         B[k] = set(nodes_k)
         return [], B
 
-    async def get_IB_v3(self, deg_list, remain_v, k=0):
+    async def get_IB_v4(self, deg_list, remain_v, k=0):
         '''
-        修改版本3:
-        思想同v2, 但是先计算全部I值, 再处理I[v_id]=k的v_id
+        修改版本4:
+        思想同v3, 但是先计算全部I值, 再处理I[v_id]=k的v_id
         '''
         ic("get local degree list")
         deg_list = [self.sec_int(deg) for deg in deg_list]  # 转化成安全矩阵
