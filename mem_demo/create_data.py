@@ -1,5 +1,6 @@
 from icecream import ic
 import networkx as nx
+import random
 import os
 
 V = 15  # num of v
@@ -247,8 +248,6 @@ def create_layer_by_file(name: str, layer, di=False):
     project_dir = os.path.dirname(os.path.dirname(__file__))
     path = os.path.join(project_dir, 'data', f'{name}.txt')
     ic(path)
-    # path = os.path.expanduser(f'~/Secure-Graph/data/{name}.txt')
-    # path = f'../data/{name}.txt'
     with open(path, 'r', encoding='utf-8') as file:
         for line in file:
             l, u, v = line.split()
@@ -275,8 +274,43 @@ def create_layer_by_file(name: str, layer, di=False):
     return G
 
 
+def generate_random(num_nodes, num_layers, dense):
+    '''
+    随机生成单层图, 指定顶点数量, 密度: 边数/(顶点数 * 层数), 按标准格式写入../data/文件夹中
+    '''
+    M = 10
+    project_dir = os.path.dirname(os.path.dirname(__file__))
+    for i in range(M):
+        path = os.path.join(project_dir, 'data', 'synthetic', f'random_{i}.txt')
+        if not os.path.exists(path):
+            file_name = f'random_{i}'
+            ic(path)
+            break
+        elif i == M - 1:
+            return
+    num_edges = int(num_layers * num_nodes * dense)
+    num_layer_edges = num_nodes * (num_nodes - 1)  # 一层最多的边数
+    num_total_edges = num_layers * num_layer_edges  # 所有层最多的边数
+    assert num_edges <= num_total_edges
+    egdes_idx = random.sample(range(num_total_edges), num_edges)
+    egdes_idx.sort()
+    with open(path, 'w') as f:
+        # 第一行: 总层数 顶点数 顶点数
+        f.write(f'{num_layers} {num_nodes} {num_nodes}\n')
+        # 数据行格式: 第几层 顶点id 顶点id (都是从1开始)
+        for edge_idx in egdes_idx:
+            # 第l层, 顶点m和顶点n之间的边的全局id为(l-1) * [m * (m - 1) + n - 1]
+            layer_idx = edge_idx // num_layer_edges + 1  # 第几层
+            from_v = edge_idx % num_layer_edges // num_nodes + 1
+            to_v = edge_idx % num_layer_edges % num_nodes + 1
+            f.write(f'{layer_idx} {from_v} {to_v}\n')
+    return file_name
+
+
 # 测试数据集的创建
 if __name__ == '__main__':
-    MG, num_layers = create_by_file('sacchcere', 4)
-    ic(MG.number_of_nodes())
-    ic(MG.number_of_edges())
+    # MG, num_layers = create_by_file('sacchcere', 4)
+    # ic(MG.number_of_nodes())
+    # ic(MG.number_of_edges())
+    file_name = generate_random(1000, 6, 2)
+    MG, num_layers = create_by_file(f'synthetic/{file_name}')
