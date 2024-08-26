@@ -128,8 +128,8 @@ def get_IB(MG: nx.MultiGraph, num_nodes, k, lamb):
 
 if __name__ == '__main__':
     # MG = create_data.create_graph()
-    MG, num_layers = create_data.create_by_file('ADHD', 3)
-    core = firm_core(MG, num_layers, 2)
+    MG, num_layers = create_data.create_by_file('sacchcere', 6)
+    core = firm_core(MG, num_layers, 4)
     total_num = 0
     for k, nodes in core.items():
         total_num += len(nodes)

@@ -5,6 +5,10 @@ main
 import matplotlib.pyplot as plt
 import numpy as np
 
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['font.serif'] = ['Times New Roman']
+
+
 datasets = ('homo', 'sacchcere', 'sanremo', 'slashdot')  # species
 algs = ('alg1', 'alg2', 'alg3')  # attribute
 
@@ -28,7 +32,7 @@ for alg, time in times.items():
     multiplier += 1
 
 # Add some text for labels, title and custom x-axis tick labels, etc.
-ax.set_ylabel('Length (mm)')
+ax.set_ylabel('Running Time (mintus)')
 ax.set_title('Penguin attributes by species')
 ax.set_xticks(x + width, datasets)
 ax.legend(loc='upper left', ncols=3)

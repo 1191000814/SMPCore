@@ -278,7 +278,7 @@ def generate_random(num_nodes, num_layers, dense):
     '''
     随机生成单层图, 指定顶点数量, 密度: 边数/(顶点数 * 层数), 按标准格式写入../data/文件夹中
     '''
-    M = 10
+    M = 100
     project_dir = os.path.dirname(os.path.dirname(__file__))
     for i in range(M):
         path = os.path.join(project_dir, 'data', 'synthetic', f'random_{i}.txt')
@@ -312,5 +312,5 @@ if __name__ == '__main__':
     # MG, num_layers = create_by_file('sacchcere', 4)
     # ic(MG.number_of_nodes())
     # ic(MG.number_of_edges())
-    file_name = generate_random(1000, 6, 2)
+    file_name = generate_random(10000, 6, 0.5)
     MG, num_layers = create_by_file(f'synthetic/{file_name}')

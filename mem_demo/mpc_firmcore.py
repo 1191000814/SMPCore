@@ -22,6 +22,7 @@ parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('--dataset', '-d', help='选择哪一个数据集(1-4)进行实验')
 parser.add_argument('--version', '-v', help='选择哪一种方法(1-2)')
 parser.add_argument('--switch_num', '-s', help='当一次迭代批量删除到只剩下几个顶点时, 开始逐个删除')
+parser.add_argument('--param_lambda', '-l', help='参数λ的值')
 args = parser.parse_args()
 
 
@@ -35,7 +36,7 @@ class FirmCore:
         else:  # 真实图数据
             self.G = create_data.create_layer_by_file(dataset, mpc.pid)
         self.num_layers = len(mpc.parties)  # 层数
-        self.lamb = lamb if lamb is not None else math.ceil(self.num_layers / 2)  # λ = m // 2
+        self.lamb = int(lamb) if lamb is not None else math.ceil(self.num_layers / 2)  # λ = m // 2
         ic(f'{self.layer + 1} of {self.num_layers} party')
         self.num_nodes = self.G.number_of_nodes()  # 节点数
         self.max_bit_len = self.num_nodes.bit_length()  # 临时确定的bit数, 后面需要改成最大度需要的bit数
@@ -307,11 +308,12 @@ class FirmCore:
                         # ? 修改本层的度后, 传递给其他方, 然后直接计算新的I和B, 不考虑哪些节点需要更新I与否
                         self.G.remove_nodes_from(B[k])
                         deg_list = utils.get_degree(self.G, self.num_nodes)
-                        if secure:
-                            I, B = await self.get_IB_v2(deg_list, remain_v, k)
-                        else:
-                            I, B = await self.get_IB(deg_list, remain_v, k)
+                        # if secure:
+                        #     I, B = await self.get_IB_v2(deg_list, remain_v, k)
+                        # else:
+                        #     I, B = await self.get_IB(deg_list, remain_v, k)
                         # ic(time() - start_time)
+                        I, B = await self.get_IB(deg_list, remain_v, k)
                         if n <= switch_num:
                             phase = False
                     # 第二阶段: 逐个删除节点, 每次只重新计算指定节点的I/B
@@ -329,10 +331,11 @@ class FirmCore:
                             if I[u_id] == pad_val:
                                 update_v.add(u_id)
                         # ic(update_v)
-                        if secure:
-                            await self.update_IB_v1(deg_list, list(update_v), B, k)
-                        else:
-                            await self.update_IB(deg_list, list(update_v), I, B)
+                        # if secure:
+                        #     await self.update_IB_v1(deg_list, list(update_v), B, k)
+                        # else:
+                        #     await self.update_IB(deg_list, list(update_v), I, B)
+                        I, B = await self.get_IB(deg_list, remain_v, k)
                         # ic(time() - start_time)
                         pass
         total_num = 0
@@ -574,8 +577,8 @@ class FirmCore:
 
 if __name__ == "__main__":
     ic(args.dataset, args.version, args.switch_num)
-    if args.dataset[0] == '0':  # 合成数据集
-        dataset = f'synthetic/random_{args.dataset[1]}'
+    if len(args.dataset) > 1:  # 合成数据集
+        dataset = f'synthetic/random_{int(args.dataset)}'
     elif args.dataset == '1':
         dataset = 'homo'
     elif args.dataset == '2':
@@ -593,14 +596,14 @@ if __name__ == "__main__":
     else:  # 自制测试数据集
         dataset = None
     if args.version == '1':
-        mpc.run(FirmCore(common_lambda, dataset).firm_core_v1())
+        mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v1())
     elif args.version == '1-1':
-        mpc.run(FirmCore(common_lambda, dataset).firm_core_v1_1())
+        mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v1_1())
     elif args.version == '2':
-        mpc.run(FirmCore(common_lambda, dataset).firm_core_v2(False))
+        mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v2(False))
     elif args.version == '2-1':
-        mpc.run(FirmCore(common_lambda, dataset).firm_core_v2(True))
+        mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v2(True))
     elif args.version == '3':
-        mpc.run(FirmCore(common_lambda, dataset).firm_core_v3(False, int(args.switch_num)))
+        mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v3(False, int(args.switch_num)))
     elif args.version == '3-1':
-        mpc.run(FirmCore(common_lambda, dataset).firm_core_v3(True, int(args.switch_num)))
+        mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v3(True, int(args.switch_num)))
