@@ -72,8 +72,9 @@
     "editor.showUnused": true,
     "editor.foldingStrategy": "indentation",
     "editor.fontFamily": "JetBrains Mono NL, 'Courier New', monospace",
+    "editor.tabSize": 4,
     "window.zoomLevel": 0.3,
-    "editor.fontSize": 13,
+    "editor.fontSize": 14,
     "editor.rulers": [
         120
     ],

@@ -4,7 +4,6 @@ from mpyc.runtime import mpc
 
 sec_int = mpc.SecInt(13)
 
-
 async def main():
     async with mpc:
         ls = [sec_int(1)]

@@ -3,6 +3,8 @@ import numpy as np
 from mpyc.runtime import mpc
 from mpyc.seclists import seclist
 
-secint = mpc.SecInt(16)
-
-ic(max(1, 3, 4))
+ls = [1, 2, 3]
+ls1 = ls.copy()
+ls1[1] = 10
+ic(ls)
+ic(ls1)

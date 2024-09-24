@@ -6,9 +6,9 @@
 import numpy as np
 from mpyc.runtime import mpc
 from mpyc.seclists import seclist
-from mpyc.statistics import _quickselect
 from icecream import ic
 from time import time
+from tqdm import tqdm
 import create_data
 import utils
 import collections
@@ -36,7 +36,10 @@ class FirmCore:
         else:  # 真实图数据
             self.G = create_data.create_layer_by_file(dataset, mpc.pid)
         self.num_layers = len(mpc.parties)  # 层数
-        self.lamb = int(lamb) if lamb is not None else math.ceil(self.num_layers / 2)  # λ = m // 2
+        if lamb is not None:
+            self.lamb = int(lamb)
+        else:
+            self.lamb = math.ceil(self.num_layers / 2)  # λ = m // 2
         ic(f'{self.layer + 1} of {self.num_layers} party')
         self.num_nodes = self.G.number_of_nodes()  # 节点数
         self.max_bit_len = self.num_nodes.bit_length()  # 临时确定的bit数, 后面需要改成最大度需要的bit数
@@ -76,7 +79,7 @@ class FirmCore:
             k = 0
             counted = 0  # 已经计算了的顶点
             while (k < self.num_nodes) and (counted < self.num_nodes):
-                ic(f"---------{k}---------")
+                # ic(f"---------{k}---------")
                 v_list = seclist(
                     [mpc.if_else(I[v_id] == k, v_id, pad_val) for v_id in range(self.num_nodes)],
                     self.sec_int_type,
@@ -129,7 +132,7 @@ class FirmCore:
             core = [await mpc.output(c) for c in core]
             ic(core)
 
-    async def firm_core_v1(self, secure=False):
+    async def firm_core_v1(self):
         '''
         修改版本1:
         不再保证整个计算过程中的节点都加密, 仅仅保证每一层最原始的数据(度列表)是加密的, 后续的步骤使用明文计算\n
@@ -144,36 +147,31 @@ class FirmCore:
             I, B = await self.get_IB(deg_list, remain_v)
             core = collections.defaultdict(set)
             # 从0开始依次移除最小Top-d的顶点
-            for k in range(self.num_nodes):
-                if len(remain_v) == 0:
-                    break
-                ic(f"--------{k}-------")
-                # ic(time() - start_time)
-                while B[k]:
-                    # ic(I)
-                    # ic(B)
-                    v_id = B[k].pop()
-                    # ic(v_id)
-                    # ic(len(remain_v))
-                    core[k].add(v_id)
-                    remain_v.remove(v_id)
-                    # 移除v后, 将需要修改I的顶点存储在N中
-                    update_v = set()  # ! 本轮需要修改I值的顶点, 每轮都需要更新
-                    # ? 需要考虑所有层中一共有哪些节点需要更新
-                    for u_id in set(self.G.neighbors(v_id)) & remain_v:
-                        deg_list[u_id] -= 1
-                        if deg_list[u_id] == I[u_id] - 1 and I[u_id] > k:
-                            update_v.add(u_id)
-                    # ic(update_v)
-                    await self.update_IB(deg_list, list(update_v), I, B)
-                    # ic(time() - start_time)
-        total_num = 0
-        for k, nodes in core.items():
-            total_num += len(nodes)
-            ic(k, len(nodes))
-        ic(total_num)
-        run_time = (time() - start_time) / 60
-        ic(run_time)
+            with tqdm(range(self.num_nodes)) as pbar:
+                for k in range(self.num_nodes):
+                    if len(remain_v) == 0:
+                        break
+                    ic(f"--------{k}-------")
+                    while B[k]:
+                        # ic(I)
+                        # ic(B)
+                        v_id = B[k].pop()
+                        # ic(v_id)
+                        # ic(len(remain_v))
+                        core[k].add(v_id)
+                        remain_v.remove(v_id)
+                        pbar.update(1)
+                        # 移除v后, 将需要修改I的顶点存储在N中
+                        update_v = set()  # ! 本轮需要修改I值的顶点, 每轮都需要更新
+                        # 该层中哪些节点需要更新
+                        for u_id in set(self.G.neighbors(v_id)) & remain_v:
+                            deg_list[u_id] -= 1
+                            # 需要更新的节点
+                            if deg_list[u_id] == I[u_id] - 1 and I[u_id] > k:
+                                update_v.add(u_id)
+                        # ic(update_v)
+                        await self.update_IB(deg_list, list(update_v), I, B)
+        self.print_result(core, start_time)
 
     async def firm_core_v1_1(self):
         '''
@@ -189,39 +187,34 @@ class FirmCore:
             ic("init I, B")
             core = collections.defaultdict(set)
             # 从0开始依次移除最小Top-d的顶点
-            for k in range(self.num_nodes):
-                if len(remain_v) == 0:
-                    break
-                ic(f"--------{k}-------")
-                # ic(time() - start_time)
-                # ? 和v1不同的地方: 每轮k删除完之后, 重新获取新的I和B
-                I, B = await self.get_IB_v2(deg_list, remain_v, k=k)
-                while B[k]:
-                    # ic(I)
-                    # ic(B)
-                    v_id = B[k].pop()
-                    # ic(v_id)
-                    # ic(len(remain_v))
-                    core[k].add(v_id)
-                    remain_v.remove(v_id)
-                    # 移除v后, 将需要修改I的顶点存储在N中
-                    update_v = set()  # ! 本轮需要修改I值的顶点, 每轮都需要更新
-                    # ? 需要考虑所有层中一共有哪些节点需要更新
-                    for u_id in set(self.G.neighbors(v_id)) & remain_v:
-                        deg_list[u_id] -= 1
-                        # ? 在这里没法获取I不为k节点具体的I值, 所以我们将当前节点所有[I值不为k]且[未被删除的]邻居都加入update_v
-                        if I[u_id] == pad_val:
-                            update_v.add(u_id)
-                    # ic(update_v)
-                    await self.update_IB_v1(deg_list, list(update_v), B, k)
-                    # ic(time() - start_time)
-        total_num = 0
-        for k, nodes in core.items():
-            total_num += len(nodes)
-            ic(k, len(nodes))
-        ic(total_num)
-        run_time = (time() - start_time) / 60
-        ic(run_time)
+            with tqdm(range(self.num_nodes)) as pbar:
+                for k in range(self.num_nodes):
+                    if len(remain_v) == 0:
+                        break
+                    ic(f"--------{k}-------")
+                    # ? 和v1不同的地方: 每轮k删除完之后, 重新获取新的I和B
+                    I, B = await self.get_IB_v2(deg_list, remain_v, k=k)
+                    while B[k]:
+                        # ic(I)
+                        # ic(B)
+                        v_id = B[k].pop()
+                        # ic(v_id)
+                        # ic(len(remain_v))
+                        core[k].add(v_id)
+                        remain_v.remove(v_id)
+                        pbar.update(1)
+                        # 移除v后, 将需要修改I的顶点存储在N中
+                        update_v = set()  # ! 本轮需要修改I值的顶点, 每轮都需要更新
+                        # ? 需要考虑所有层中一共有哪些节点需要更新
+                        for u_id in set(self.G.neighbors(v_id)) & remain_v:
+                            deg_list[u_id] -= 1
+                            # ? 在这里没法获取I不为k节点具体的I值, 所以我们将当前节点所有[I值不为k]且[未被删除的]邻居都加入update_v
+                            # (其实就是I值大于k的邻居节点)
+                            if I[u_id] == pad_val:
+                                update_v.add(u_id)
+                        # ic(update_v)
+                        await self.update_IB_v1(deg_list, list(update_v), B, k)
+        self.print_result(core, start_time)
 
     async def firm_core_v2(self, secure=False):
         '''
@@ -237,45 +230,44 @@ class FirmCore:
             ic("init I, B")
             # _, B = await self.get_IB_v2(deg_list, remain_v)
             core = collections.defaultdict(set)
-            # 从0开始依次移除最小Top-d的顶点
-            for k in range(self.num_nodes):
-                if len(remain_v) == 0:
-                    break
-                ic(f"--------{k}-------")
-                # ic(time() - start_time)
-                if secure:
-                    _, B = await self.get_IB_v2(deg_list, remain_v, k)
-                else:
-                    _, B = await self.get_IB(deg_list, remain_v, k)
-                while B[k]:
-                    # ic(I)
-                    # ic(B)
-                    # ic(v_id)
-                    assert len(core[k] & B[k]) == 0
-                    core[k] = core[k] | B[k]
-                    remain_v = remain_v - B[k]
-                    # ic(len(remain_v))
-                    # ? 修改本层的度后, 传递给其他方, 然后直接计算新的I和B, 不考虑哪些节点需要更新I与否
-                    self.G.remove_nodes_from(B[k])
-                    deg_list = utils.get_degree(self.G, self.num_nodes)
+            with tqdm(range(self.num_nodes)) as pbar:
+                # 从0开始依次移除最小Top-d的顶点
+                for k in range(self.num_nodes):
+                    if len(remain_v) == 0:
+                        break
+                    ic(f"--------{k}-------")
                     if secure:
                         _, B = await self.get_IB_v2(deg_list, remain_v, k)
                     else:
                         _, B = await self.get_IB(deg_list, remain_v, k)
-                    # ic(time() - start_time)
-        total_num = 0
-        for k, nodes in core.items():
-            total_num += len(nodes)
-            ic(k, len(nodes))
-        ic(total_num)
-        run_time = (time() - start_time) / 60
-        ic(run_time)
+                    while B[k]:
+                        # ic(I)
+                        # ic(B)
+                        # ic(v_id)
+                        # ic(len(B[k]))
+                        assert len(core[k] & B[k]) == 0
+                        core[k] = core[k] | B[k]
+                        remain_v = remain_v - B[k]
+                        pbar.update(len(B[k]))
+                        # ic(len(remain_v))
+                        # ? 修改本层的度后, 传递给其他方, 然后直接计算新的I和B, 不考虑哪些节点需要更新I与否
+                        self.G.remove_nodes_from(B[k])
+                        deg_list = utils.get_degree(self.G, self.num_nodes)
+                        if secure:
+                            _, B = await self.get_IB_v2(deg_list, remain_v, k)
+                        else:
+                            _, B = await self.get_IB(deg_list, remain_v, k)
+                        # ic(time() - start_time)
+        ic(len(core[0]))
+        self.print_result(core, start_time)
 
-    async def firm_core_v3(self, secure=False, switch_num=3):
+    async def firm_core_v3(self, secure1=False, secure2=False, switch_num=3):
         '''
         修改版本3:
         前面两个版本: v1: 批量删除, v2: 逐个删除
         综合使用版本v1和v2, 对于每一轮k迭代中, 先使用v2批量删除大部分节点, 最后剩余少数节点时, 使用v1逐个删除
+        secure1: 是否使用更安全的get_IB
+        secure2: 是否使用更安全的update_IB
         '''
         async with mpc:
             start_time = time()
@@ -285,66 +277,62 @@ class FirmCore:
             ic("init I, B")
             core = collections.defaultdict(set)
             # 从0开始依次移除最小Top-d的顶点
-            for k in range(self.num_nodes):
-                if len(remain_v) == 0:
-                    break
-                ic(f"--------{k}-------")
-                # ic(time() - start_time)
-                if secure:
-                    I, B = await self.get_IB_v2(deg_list, remain_v, k)
-                else:
-                    I, B = await self.get_IB(deg_list, remain_v, k)
-                phase = True  # 处于哪一阶段, 批量True/逐个False
-                while B[k]:
-                    # ic(I)
-                    # ic(B)
-                    # ic(v_id)
-                    # 第一阶段: 批量删除节点, 每次重新计算全部节点的I/B
-                    if phase:
-                        n = len(B[k])
-                        core[k] = core[k] | B[k]
-                        remain_v = remain_v - B[k]
-                        # ic(len(remain_v))
-                        # ? 修改本层的度后, 传递给其他方, 然后直接计算新的I和B, 不考虑哪些节点需要更新I与否
-                        self.G.remove_nodes_from(B[k])
-                        deg_list = utils.get_degree(self.G, self.num_nodes)
-                        # if secure:
-                        #     I, B = await self.get_IB_v2(deg_list, remain_v, k)
-                        # else:
-                        #     I, B = await self.get_IB(deg_list, remain_v, k)
-                        # ic(time() - start_time)
+            with tqdm(range(self.num_nodes)) as pbar:
+                for k in range(self.num_nodes):
+                    if len(remain_v) == 0:
+                        break
+                    ic(f"--------{k}-------")
+                    if not secure1:
                         I, B = await self.get_IB(deg_list, remain_v, k)
-                        if n <= switch_num:
-                            phase = False
-                    # 第二阶段: 逐个删除节点, 每次只重新计算指定节点的I/B
                     else:
-                        v_id = B[k].pop()
+                        I, B = await self.get_IB_v2(deg_list, remain_v, k)
+                    phase = True  # 处于哪一阶段, 批量True/逐个False
+                    while B[k]:
+                        # ic(I)
+                        # ic(B)
                         # ic(v_id)
-                        # ic(len(remain_v))
-                        core[k].add(v_id)
-                        remain_v.remove(v_id)
-                        # 移除v后, 将需要修改top_d的顶点存储在N中
-                        update_v = set()  # ! 本轮需要修改I值的顶点, 每轮都需要更新
-                        # ? 需要考虑所有层中一共有哪些节点需要更新
-                        for u_id in set(self.G.neighbors(v_id)) & remain_v:
-                            deg_list[u_id] -= 1
-                            if I[u_id] == pad_val:
-                                update_v.add(u_id)
-                        # ic(update_v)
-                        # if secure:
-                        #     await self.update_IB_v1(deg_list, list(update_v), B, k)
-                        # else:
-                        #     await self.update_IB(deg_list, list(update_v), I, B)
-                        I, B = await self.get_IB(deg_list, remain_v, k)
-                        # ic(time() - start_time)
-                        pass
-        total_num = 0
-        for k, nodes in core.items():
-            total_num += len(nodes)
-            ic(k, len(nodes))
-        ic(total_num)
-        run_time = (time() - start_time) / 60
-        ic(run_time)
+                        # 第一阶段: 批量删除节点, 每次重新计算全部节点的I/B
+                        if phase:
+                            n = len(B[k])
+                            core[k] = core[k] | B[k]
+                            remain_v = remain_v - B[k]
+                            pbar.update(len(B[k]))
+                            # ic(len(remain_v))
+                            # ? 修改本层的度后, 传递给其他方, 然后直接计算新的I和B, 不考虑哪些节点需要更新I与否
+                            self.G.remove_nodes_from(B[k])
+                            deg_list = utils.get_degree(self.G, self.num_nodes)
+                            if not secure1:
+                                I, B = await self.get_IB(deg_list, remain_v, k)
+                            else:
+                                I, B = await self.get_IB_v2(deg_list, remain_v, k)
+                            if n <= switch_num:
+                                ic('phase changed')
+                                phase = False
+                        # 第二阶段: 逐个删除节点, 每次只重新计算指定节点的I/B
+                        else:
+                            v_id = B[k].pop()
+                            # ic(v_id)
+                            # ic(len(remain_v))
+                            core[k].add(v_id)
+                            remain_v.remove(v_id)
+                            pbar.update(1)
+                            # 移除v后, 将需要修改top_d的顶点存储在N中
+                            update_v = set()  # ! 本轮需要修改I值的顶点, 每轮都需要更新
+                            # ? 需要考虑所有层中一共有哪些节点需要更新
+                            for u_id in set(self.G.neighbors(v_id)) & remain_v:
+                                deg_list[u_id] -= 1
+                                if not secure2:
+                                    if deg_list[u_id] == I[u_id] - 1 and I[u_id] > k:
+                                        update_v.add(u_id)
+                                else:
+                                    if I[u_id] == pad_val:
+                                        update_v.add(u_id)
+                            # ic(update_v)
+                            if not secure2:
+                                await self.update_IB(deg_list, list(update_v), I, B)
+                            else:
+                                await self.update_IB_v1(deg_list, list(update_v), B, k)
+        self.print_result(core, start_time)
 
     # 下面是工具函数
 
@@ -363,38 +351,47 @@ class FirmCore:
         ic(self.max_bit_len)
         self.sec_int_type = mpc.SecInt(self.max_bit_len)
 
+    def print_result(self, core: collections.defaultdict, start_time):
+        '''
+        算法运行结束时打印一下结果和时间
+        '''
+        total_num = 0
+        for k, nodes in core.items():
+            total_num += len(nodes)
+            ic(k, len(nodes))
+        ic(total_num)
+        run_time = (time() - start_time) / 60
+        ic(run_time)
+        assert total_num == self.num_nodes
+
     async def get_IB(self, deg_list, remain_v, k=0):
         """
         初始化I和B
         根据当前层的度矩阵, 获取整个多层图的B结构
-        k: 仅在mod2中使用, 即使度小于k也在B中存储在B[k]中
         将mpc.sorted()换成更快的np.sort()函数
         """
-        # ic("get local degree list")
         remain_v = list(remain_v)  # 变为列表, 需要保持遍历有序
         deg_list = [self.sec_int(deg) for deg in deg_list]  # 转化成安全矩阵
         # Degree的[行]为层数, [列]为id
-        # ic("get all degree list")
         Degree = mpc.input(deg_list)  # [[layer1], [layer2]...[layern]]
         Degree = [mpc.np_fromlist(deg_layer) for deg_layer in Degree]  # [np.array1, np.array2...]
         Degree = np.vstack(Degree)
-        # 原id -> (从0开始的连续)新id
+        # remain中的原id -> (从0开始的连续)新id
         node2idx = {v_id: i for i, v_id in enumerate(remain_v)}
-        # I0 = [pad_val for _ in range(len(remain_v))]
-        # ic("compute I")
-        Degree = np.sort(Degree, axis=0)
-        I0 = [Degree[-self.lamb][v_id] for v_id in remain_v]
+        Degree = Degree[:, remain_v]  # 先切片
+        # I0: 只含有remain中节点
+        I0 = np.sort(Degree, axis=0)[-self.lamb, :]  # 再排序
         #! 这里注意I0是否为空
         if len(I0) > 0:
             I0 = await mpc.output(I0)
+        # I: 含所有节点
         I = [pad_val for _ in range(self.num_nodes)]
         for v_id in remain_v:
             I[v_id] = I0[node2idx[v_id]]
         # ? 既然I是明文的, 那么也可以有B
         B = collections.defaultdict(set)
-        # 只计算剩余节点, 添加进B
         for v_id in remain_v:
-            # id为i的顶点在各层的第λ大的度
+            # 只记录I值为k的顶点在各层的第λ大的度, 均记为k
             B[max(I[v_id], k)].add(v_id)
         return I, B
 
@@ -418,15 +415,14 @@ class FirmCore:
             # 每个id在各层的度
             per_id = Degree[:][v_id]
             # id为i的顶点在各层的第λ大的度
-            deg_lamb = np.sort(per_id)[-self.lamb]
+            deg_lamb = np.sort(per_id, axis=0)[-self.lamb]
             I[v_id] = await mpc.output(deg_lamb)
         # ? 既然I是明文的, 那么也可以有B
         B = collections.defaultdict(set)
-        # 只计算剩余节点, 添加进B
-        ic("compute B")
         for v_id in remain_v:
-            # id为i的顶点在各层的第λ大的度
-            B[max(I[v_id], k)].add(v_id)
+            # 只记录I值为k的顶点在各层的第λ大的度, 均记为k
+            if I[v_id] == k:
+                B[k].add(v_id)
         return I, B
 
     async def get_IB_v2(self, deg_list, remain_v, k=0):
@@ -435,21 +431,19 @@ class FirmCore:
         在firm_core_v2中, 每次遍历只用到了B[k]的值, 那么I中值不等于k的值可以不公开计算, 减少隐私泄露量
         计算I的密文时, 如果I[i] > k, 设置I[i] = -1
         '''
-        # ic("get local degree list")
         remain_v = list(remain_v)  # 变为列表, 需要保持遍历有序
         deg_list = [self.sec_int(deg) for deg in deg_list]  # 转化成安全矩阵
         # Degree的[行]为层数, [列]为id
-        # ic("get all degree list")
         Degree = mpc.input(deg_list)  # [[layer1], [layer2]...[layern]]
         Degree = [mpc.np_fromlist(deg_layer) for deg_layer in Degree]  # [np.array1, np.array2...]
         Degree = np.vstack(Degree)
-        # 原id -> (从0开始的连续)新id
+        # remain_v中的原id -> (从0开始的连续)新id
         node2idx = {v_id: i for i, v_id in enumerate(remain_v)}
-        Degree = np.sort(Degree, axis=0)
-        I0 = [Degree[-self.lamb][v_id] for v_id in remain_v]
+        Degree = Degree[:, remain_v]  # 先切片
+        I0 = np.sort(Degree, axis=0)[-self.lamb, :]  # 再排序
         #! 这里注意I0是否为空
         if len(I0) > 0:
-            #! 比get_IB_v1多加了这一步
+            #! 比get_IB多加了这一步, I值<=k的均记为k
             I1 = [mpc.if_else(i > k, pad_val, k) for i in I0]
             I1 = await mpc.output(I1)
         I = [pad_val for _ in range(self.num_nodes)]
@@ -457,11 +451,10 @@ class FirmCore:
             I[v_id] = I1[node2idx[v_id]]
         # ? 既然I是明文的, 那么也可以有B
         B = collections.defaultdict(set)
-        # 只计算剩余节点, 添加进B
         for v_id in remain_v:
-            # id为i的顶点在各层的第λ大的度
-            if I[v_id] != pad_val:
-                B[I[v_id]].add(v_id)
+            # 只记录I值为k的顶点在各层的第λ大的度, 均记为k
+            if I[v_id] == k:
+                B[k].add(v_id)
         return I, B
 
     async def get_IB_v3(self, deg_list, remain_v, k=0):
@@ -506,34 +499,33 @@ class FirmCore:
         只计算需要更新的节点, 尽量减少decode操作
         """
         # ? 在mod1的基础上进行修改, 不重新计算所有的I的值, 只计算必须修改I值节点的I值
-        # ic("get local degree list")
         deg_list = [self.sec_int(deg) for deg in deg_list]  # 转化成安全矩阵
         # Degree的[行]为层数, [列]为id
         Degree = mpc.input(deg_list)  # [[layer_1], [layer_2]...[layer_n]]
         Degree = [mpc.np_fromlist(deg_layer) for deg_layer in Degree]  # [np.array_1, np.array_2...]
         Degree = np.vstack(Degree)
+
         #! 这里需要使得每个mpc.input的数量都相等
-        update_nums = mpc.input(self.sec_int(len(update_v)))  # 单层图需要修改I的数量
-        max_update_num = await mpc.output(mpc.max(update_nums))  # 各层中最大需要修改的数量
+        update_nums = mpc.input(self.sec_int(len(update_v)))  # 每层图需要修改I的数量
+        max_update_num = await mpc.output(mpc.max(update_nums))  # 各层中最大需要修改I的数量
         if max_update_num == 0:  # 传入的长度至少为1
             max_update_num = 1
         update_v.extend([pad_val] * (max_update_num - len(update_v)))  # 填充到最大数量
         all_update_v = mpc.input([self.sec_int(v_id) for v_id in update_v])  # 各层需要改变I的节点
         # ic(len(all_update_v))
-        # ic(all_update_v)
         all_update_v = [v_id for per_layer in all_update_v for v_id in per_layer]  # 全放到一个列表里, 但可能有重复
         all_update_v = set(await mpc.output(all_update_v))  # 明文后用集合表示
         #! pad_val有可能不存在
         all_update_v.discard(pad_val)
         all_update_v = list(all_update_v)  # idx -> v_id
-        # ic(all_update_v)
-        # ic("update I and B")
+        # ic(len(all_update_v))
         if all_update_v:
-            I_update = mpc.np_tolist(np.sort(Degree[:, all_update_v], axis=0)[-self.lamb, :])
+            Degree = Degree[:, all_update_v]
+            I_update = mpc.np_tolist(np.sort(Degree, axis=0)[-self.lamb, :])
             I_update = await mpc.output(I_update, receivers=None)
             # ? 明文计算I中的内容
             for i, v_id in enumerate(all_update_v):
-                # id为i的顶点在各层的第λ大的度
+                # 反正I中都是明文, 加不加入B中都一样, 干脆全部加入B
                 B[I[v_id]].remove(v_id)
                 I[v_id] = I_update[i]
                 B[I[v_id]].add(v_id)
@@ -543,12 +535,12 @@ class FirmCore:
         修改版本1, 传入的I为仅有k值的节点, 每次更新数组I, 并每次将I值-1之后为k的节点加入B
         """
         # ? 在mod1的基础上进行修改, 不重新计算所有的I的值, 只计算必须修改I值节点的I值
-        # ic("get local degree list")
         deg_list = [self.sec_int(deg) for deg in deg_list]  # 转化成安全矩阵
         # Degree的[行]为层数, [列]为id
         Degree = mpc.input(deg_list)  # [[layer1], [layer2]...[layern]]
         Degree = [mpc.np_fromlist(deg_layer) for deg_layer in Degree]  # [np.array1, np.array2...]
         Degree = np.vstack(Degree)
+
         #! 这里需要使得每个mpc.input的数量都相等
         update_nums = mpc.input(self.sec_int(len(update_v)))  # 单层图需要修改I的数量
         max_update_num = await mpc.output(mpc.max(update_nums))  # 各层中最大需要修改的数量
@@ -563,21 +555,24 @@ class FirmCore:
         #! pad_val有可能不存在
         all_update_v.discard(pad_val)
         all_update_v = list(all_update_v)  # idx -> v_id
-        # ic("update I and B")
         if all_update_v:
             # 对应all_update_v中的节点
-            I_update = mpc.np_tolist(np.sort(Degree[:, all_update_v], axis=0)[-self.lamb, :])
-            I0 = [mpc.if_else(i > k, pad_val, i) for i in I_update]
+            Degree = Degree[:, all_update_v]
+            I_update = mpc.np_tolist(np.sort(Degree, axis=0)[-self.lamb, :])
+            #! 比update_IB多了这一步
+            I0 = [mpc.if_else(i > k, pad_val, k) for i in I_update]
             I = await mpc.output(I0)
             for i, v_id in enumerate(all_update_v):
-                if I[i] != pad_val:
+                if I[i] == k:
                     # 更新B[k]
                     B[k].add(v_id)
 
 
 if __name__ == "__main__":
-    ic(args.dataset, args.version, args.switch_num)
-    if len(args.dataset) > 1:  # 合成数据集
+    ic(args.dataset, args.version, args.param_lambda, args.switch_num)
+    if args.dataset is None:  # 测试数据集
+        dataset = None
+    elif len(args.dataset) > 1:  # 合成数据集
         dataset = f'synthetic/random_{int(args.dataset)}'
     elif args.dataset == '1':
         dataset = 'homo'
@@ -593,8 +588,6 @@ if __name__ == "__main__":
         dataset = 'FAO'
     elif args.dataset == '7':
         dataset = 'RM'
-    else:  # 自制测试数据集
-        dataset = None
     if args.version == '1':
         mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v1())
     elif args.version == '1-1':
@@ -602,8 +595,10 @@ if __name__ == "__main__":
     elif args.version == '2':
         mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v2(False))
     elif args.version == '2-1':
-        mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v2(True))
+        mpc.run(FirmCore(args.param_lambda,  dataset).firm_core_v2(True))
     elif args.version == '3':
-        mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v3(False, int(args.switch_num)))
+        mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v3(False, False, int(args.switch_num)))
     elif args.version == '3-1':
-        mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v3(True, int(args.switch_num)))
+        mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v3(True, True, int(args.switch_num)))
+    elif args.version == '3-2':
+        mpc.run(FirmCore(args.param_lambda, dataset).firm_core_v3(True, False, int(args.switch_num)))
