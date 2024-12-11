@@ -312,5 +312,7 @@ if __name__ == '__main__':
     # MG, num_layers = create_by_file('sacchcere', 4)
     # ic(MG.number_of_nodes())
     # ic(MG.number_of_edges())
-    file_name = generate_random(10000, 6, 0.5)
+    file_name = generate_random(100, 6, 4)
     MG, num_layers = create_by_file(f'synthetic/{file_name}')
+
+# python3 -u "/home/xiaozeqiang/secure-MLG/mem_demo/mpc_firmcore.py" -M6 -d08 -v2-1 -s6 -I0
