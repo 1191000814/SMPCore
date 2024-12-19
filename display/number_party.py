@@ -27,7 +27,7 @@ y16 = [9.56, 19.23, 37.13, 55.05, 77.59, 95.87, 4.66, 6.42, 8.18, 7.04, 21.51, 1
 # 比较算法1,2,3
 all_data = np.array([y2, y06, y07, y08, y09, y10, y11, y12, y15, y16])  # [10, 18]
 
-line_names = ['SMPCore', 'SMPCore*', 'SMPCore-Switch']
+line_names = ['SMPCore', 'SMPCore-BR', 'SMPCore-AR']
 
 for i, y_data in enumerate(all_data):
     line_graph = ppl.LineGraph()
@@ -35,4 +35,4 @@ for i, y_data in enumerate(all_data):
     line_graph.plot_2d(x_data, np.reshape(y_data, [3, 6]), line_names)
     line_graph.x_label = 'Number of Partys'
     line_graph.y_label = 'Running Time (Minute)'
-    line_graph.save(f'numvber_of__party{i}.png')
+    line_graph.save(f'number_of__party{i}.png')

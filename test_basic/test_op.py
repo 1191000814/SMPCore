@@ -17,6 +17,6 @@ class A:
         return A(self.a + other)
 
 
-a = A(1)
-b = 1 - a
-ic(b.a)
+a = 0
+if a > 0 and 1 / a == 1:
+    ic(1)
