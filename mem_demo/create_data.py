@@ -6,6 +6,7 @@ import os
 V = 15  # num of v
 L = 3  # num of l
 edges = [set() for _ in range(L)]
+
 edges[0].update(
     {
         (1, 2),
@@ -249,6 +250,10 @@ def create_layer_by_file(name: str, layer, di=False):
     path = os.path.join(project_dir, 'data', f'{name}.txt')
     ic(path)
     with open(path, 'r', encoding='utf-8') as file:
+        line0 = file.readline()
+        num_layers, _, _ = line0.split()
+        if layer >= int(num_layers):
+            layer %= int(num_layers)
         for line in file:
             l, u, v = line.split()
             # 源节点,目标节点,层数
@@ -258,17 +263,17 @@ def create_layer_by_file(name: str, layer, di=False):
             nodes.add(v)
             edges.append([u, v, l])
             layers.add(l)
-            num_layers = max(l + 1, num_layers)
-            assert layer < num_layers
-        # ? 重点: 每个单层图的顶点id都保持一致(和多层图的顶点id一致)
-        nodes = sorted(list(nodes))
-        layers = sorted(list(layers))
-        nodes_map = {node: i for i, node in enumerate(nodes)}
-        layers_map = {layer: i for i, layer in enumerate(layers)}
-        G.add_nodes_from(nodes_map.values())
-        for u, v, l in edges:
-            if layers_map[l] == layer:
-                G.add_edges_from([(nodes_map[u], nodes_map[v])])
+            # num_layers = max(l + 1, num_layers)
+            # assert layer < num_layers
+    # ? 重点: 每个单层图的顶点id都保持一致(和多层图的顶点id一致)
+    nodes = sorted(list(nodes))
+    layers = sorted(list(layers))
+    nodes_map = {node: i for i, node in enumerate(nodes)}
+    layers_map = {layer: i for i, layer in enumerate(layers)}
+    G.add_nodes_from(nodes_map.values())
+    for u, v, l in edges:
+        if layers_map[l] == layer:
+            G.add_edges_from([(nodes_map[u], nodes_map[v])])
     ic(G.number_of_nodes())
     ic(G.number_of_edges())
     return G
@@ -305,6 +310,13 @@ def generate_random(num_nodes, num_layers, dense):
             to_v = edge_idx % num_layer_edges % num_nodes + 1
             f.write(f'{layer_idx} {from_v} {to_v}\n')
     return file_name
+
+
+def gen_barabasi_albert(l, m, n):
+    '''
+    生成barabasi albert图, l层, 每层m个节点, n条边
+    '''
+    nx.barabasi_albert_graph(10000, 10000)
 
 
 # 测试数据集的创建

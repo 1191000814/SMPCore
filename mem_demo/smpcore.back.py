@@ -304,9 +304,11 @@ class FirmCore:
                                 I, B = await self.get_IB(deg_list, remain_v, k)
                             else:
                                 I, B = await self.get_IB_v2(deg_list, remain_v, k)
-                            if len(B[k]) > 0 and len(remain_v) / len(B[k]) > switch_num:
+                            aver_deg = self.G.subgraph(remain_v).number_of_edges() / (len(remain_v) * self.num_layers)
+                            if len(B[k]) > 0 and len(remain_v) / (len(B[k]) * aver_deg) > switch_num:
                                 # ic('remove method changed')
                                 batch_remove = False
+                                deg_list = utils.get_degree(self.G, self.num_nodes)
                         # 第二阶段: 逐个删除节点, 每次只重新计算指定节点的I/B
                         else:
                             v_id = B[k].pop()
@@ -529,7 +531,7 @@ class FirmCore:
                 I[v_id] = I_update[i]
                 B[I[v_id]].add(v_id)
 
-    async def update_IB_v1(self, deg_list, update_v: list, B, k):
+    async def update_IB_v1(self, deg_list, update_v: list, I, B, k):
         """
         修改版本1, 传入的I为仅有k值的节点, 每次更新数组I, 并每次将I值-1之后为k的节点加入B
         """
@@ -560,9 +562,10 @@ class FirmCore:
             I_update = mpc.np_tolist(np.sort(Degree, axis=0)[-self.lamb, :])
             #! 比update_IB多了这一步
             I0 = [mpc.if_else(i > k, pad_val, k) for i in I_update]
-            I = await mpc.output(I0)
+            I0 = await mpc.output(I0)
             for i, v_id in enumerate(all_update_v):
-                if I[i] == k:
+                I[v_id] = I0[i]
+                if I0[i] == k:
                     # 更新B[k]
                     B[k].add(v_id)
 
