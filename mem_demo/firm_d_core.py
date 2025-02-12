@@ -3,7 +3,7 @@
 (有向图部分)
 """
 
-import create_data
+import mem_demo.dataset as dataset
 import utils
 import numpy as np
 from icecream import ic
@@ -96,8 +96,8 @@ def firm_d_core(MDG: nx.MultiDiGraph, L, lamb):
 
 
 if __name__ == '__main__':
-    MDG, L = create_data.create_by_file('homo', di=True)
-    MDG = create_data.create_graph(di=True)
+    MDG, L = dataset.create_by_file('homo', di=True)
+    MDG = dataset.create_graph(di=True)
     # V = MDG.number_of_nodes()
     core_d = firm_d_core(MDG, L, 2)
     ic(core_d)

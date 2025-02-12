@@ -1,7 +1,7 @@
 from mpyc.runtime import mpc
 from mpyc.seclists import seclist
 from icecream import ic
-import create_data
+import mem_demo.dataset as dataset
 import utils
 import collections
 
@@ -24,7 +24,7 @@ async def firmcore(lamb):
     # 除了生成v_list, 其他地方尽量不使用明文
     async with mpc:
         l0 = mpc.pid  # 当前层数
-        G = create_data.create_layer(l0)
+        G = dataset.create_layer(l0)
         num_nodes = G.number_of_nodes()
         num_layers = len(mpc.parties)
         # 每个顶点vertices对应的Top-λ(deg(vertices))
@@ -105,9 +105,9 @@ async def firmcore_mod1(lamb, dataset):
     async with mpc:
         l0 = mpc.pid  # layer id
         if dataset is None:
-            G = create_data.create_layer(l0)  # 该计算方的单层图
+            G = dataset.create_layer(l0)  # 该计算方的单层图
         else:
-            G = create_data.create_layer_by_file(dataset, mpc.pid)
+            G = dataset.create_layer_by_file(dataset, mpc.pid)
         num_layers = len(mpc.parties)  # nums of layers
         num_nodes = G.number_of_nodes()  # nums of nodes
         ic(f'{l0 + 1} of {num_layers} party')

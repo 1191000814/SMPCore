@@ -9,7 +9,7 @@ from mpyc.seclists import seclist
 from icecream import ic
 from time import time
 from tqdm import tqdm
-import create_data
+import mem_demo.dataset as dataset
 import utils
 import collections
 import argparse
@@ -32,9 +32,9 @@ class FirmCore:
     def __init__(self, lamb, dataset=None):
         self.layer = mpc.pid  # 该层id
         if dataset is None:  # 测试图数据
-            self.G = create_data.create_layer(self.layer)
+            self.G = dataset.create_layer(self.layer)
         else:  # 真实图数据
-            self.G = create_data.create_layer_by_file(dataset, mpc.pid)
+            self.G = dataset.create_layer_by_file(dataset, mpc.pid)
         self.num_layers = len(mpc.parties)  # 层数
         if lamb is not None:
             self.lamb = int(lamb)

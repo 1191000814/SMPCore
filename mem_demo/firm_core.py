@@ -2,7 +2,7 @@
 论文firmcore decomposition of multilayer networks的实现
 """
 
-import create_data
+import mem_demo.dataset as dataset
 import utils
 import numpy as np
 from icecream import ic
@@ -173,11 +173,11 @@ def firm_core3(MG0: nx.MultiGraph, num_layers, lamb, switch_num=3):
 def print_result(core, start_time):
     run_time = time.time() - start_time
     ic(run_time)
-    total_num = 0
-    for k, nodes in core.items():
-        total_num += len(nodes)
-        ic(k, len(nodes))
-    ic(total_num)
+    # total_num = 0
+    # for k, nodes in core.items():
+    #     total_num += len(nodes)
+    #     ic(k, len(nodes))
+    # ic(total_num)
 
 
 def get_IB(MG: nx.MultiGraph, num_nodes, k, lamb):
@@ -222,8 +222,14 @@ def get_IB(MG: nx.MultiGraph, num_nodes, k, lamb):
 if __name__ == '__main__':
     dataset = ['homo', 'sacchcere', 'sanremo', 'slashdot', 'ADHD', 'FAO', 'RM', 'TD']
     # MG = create_data.create_graph()
-    MG, num_layers = create_data.create_by_file(dataset[1], 6)
+    MG, num_layers = dataset.create_by_file(dataset[5], 3)
     ic(num_layers)
-    firm_core1(MG, num_layers - 1, 4)
-    firm_core2(MG, num_layers - 1, 4)
-    firm_core3(MG, num_layers - 1, 4)
+    firm_core1(MG, 3, 1)
+    firm_core2(MG, 3, 1)
+    firm_core3(MG, 3, 1)
+    firm_core1(MG, 3, 2)
+    firm_core2(MG, 3, 2)
+    firm_core3(MG, 3, 2)
+    firm_core1(MG, 3, 3)
+    firm_core2(MG, 3, 3)
+    firm_core3(MG, 3, 3)

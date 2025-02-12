@@ -27,6 +27,8 @@ try:
     while any(sub_process.poll() is None for sub_process in sub_processes):
         pass
 except KeyboardInterrupt:
+    pass
+finally:
     for sub_process in sub_processes:
-        ic(f'kill subprocess {sub_process.pid}')
+        print(f'subprocess {sub_process.pid} end')
         sub_process.terminate()

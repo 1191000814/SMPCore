@@ -9,7 +9,7 @@ from mpyc.runtime import mpc
 from icecream import ic
 from time import time
 from tqdm import tqdm
-import create_data
+import dataset as DS
 import utils
 import collections
 import argparse
@@ -32,9 +32,9 @@ class FirmCore:
     def __init__(self, lamb, dataset=None):
         self.layer = mpc.pid  # 该层id
         if dataset is None:  # 测试图数据
-            self.G = create_data.create_layer(self.layer)
+            self.G = DS.read_my_layer(self.layer)
         else:  # 真实图数据
-            self.G = create_data.create_layer_by_file(dataset, mpc.pid)
+            self.G = DS.read_layer(dataset, mpc.pid)
         self.num_layers = len(mpc.parties)  # 层数
         if lamb is not None:
             self.lamb = int(lamb)
@@ -156,8 +156,11 @@ class FirmCore:
                             deg_list = utils.get_degree(self.G, self.num_nodes)
                             self.time_pt += time() - last_time
                             B = await self.init_IB(deg_list, remain_v, k)
+
+                            last_time = time()
                             if len(B[k]) > 0 and len(remain_v) / len(B[k]) > switch_num:
                                 batch_remove = False
+                            self.time_ob += time() - last_time
                         # 第二阶段: 逐个删除节点, 每次只重新计算指定节点的I/B
                         else:
                             v_id = B[k].pop()
@@ -203,9 +206,11 @@ class FirmCore:
         assert total_num == self.num_nodes
         ic(total_num)
         run_time = (time() - start_time) / 60
-        ic(self.time_pt / 60)
-        ic(self.time_ob / 60)
-        ic(self.time_com / 60)
+        self.time_pt, self.time_ob, self.time_com = self.time_pt / 60, self.time_ob / 60, self.time_com / 60
+        time_sum = self.time_pt + self.time_ob + self.time_com
+        ic(self.time_pt, self.time_pt / time_sum)
+        ic(self.time_ob, self.time_ob / time_sum)
+        ic(self.time_com, self.time_com / time_sum)
         ic(run_time)
 
     async def init_IB(self, deg_list, remain_v, k=0):
@@ -299,7 +304,7 @@ class FirmCore:
 
 if __name__ == "__main__":
     ic(args.dataset, args.version, args.param_lambda, args.switch_num)
-    datasets = {1: 'homo', 2: 'sacchcere', 3: 'sanremo', 4: 'slashdot', 5: 'ADHD', 6: 'FAO', 7: 'RM'}
+    datasets = {1: 'homo', 2: 'sacchcere', 3: 'sanremo', 4: 'slashdot', 5: 'Terrorist', 6: 'RM'}
     if args.dataset is None:  # 测试数据集
         dataset = None
     elif len(args.dataset) > 1:  # 合成数据集

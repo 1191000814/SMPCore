@@ -1,7 +1,7 @@
 # 使用edge-local差分隐私给每个层分别添加噪声, 两个对应顶点相同, 只有一条边对应不同的图视为[相邻图]
 # 在本地使用本地差分隐私, 每个图的都使用自己数据集的平滑敏感度(通过局部敏感度计算)作为拉普拉斯噪声的参数
- 
-import create_data
+
+import mem_demo.dataset as dataset
 import utils
 import dp_utils
 import numpy as np
@@ -75,7 +75,7 @@ def firm_core(MG: nx.MultiGraph, num_layers, lamb, epsilon):
 
 if __name__ == "__main__":
     # MG = create_data.create_graph()
-    MG, num_layers = create_data.create_by_file("homo")
+    MG, num_layers = dataset.create_by_file("homo")
     core_dp = firm_core(MG.copy(), num_layers, 2, 0.2)
     core = firm_core(MG, num_layers, 2, 0)
     ic(core)

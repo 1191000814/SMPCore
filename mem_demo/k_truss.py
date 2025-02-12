@@ -1,4 +1,4 @@
-import create_data
+import mem_demo.dataset as dataset
 import utils
 import numpy as np
 from icecream import ic

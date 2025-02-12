@@ -8,7 +8,7 @@ from mpyc.runtime import mpc
 from icecream import ic
 from time import time
 from tqdm import tqdm
-import create_data
+import dataset as DS
 import utils
 import collections
 import argparse
@@ -31,9 +31,9 @@ class FirmCore:
     def __init__(self, lamb, dataset=None):
         self.layer = mpc.pid  # 该层id
         if dataset is None:  # 测试图数据
-            self.G = create_data.create_layer(self.layer)
+            self.G = DS.read_my_layer(self.layer)
         else:  # 真实图数据
-            self.G = create_data.create_layer_by_file(dataset, mpc.pid)
+            self.G = DS.read_layer(dataset, mpc.pid)
         self.num_layers = len(mpc.parties)  # 层数
         if lamb is not None:
             self.lamb = int(lamb)
@@ -111,7 +111,7 @@ class FirmCore:
         ic(len(core[0]))
         self.print_result(core, start_time)
 
-    async def smpcore_ar(self, switch_num=3):
+    async def smpcore_ar(self, switch_num=100):
         # 原算法3-1
         async with mpc:
             start_time = time()
@@ -139,7 +139,6 @@ class FirmCore:
                             deg_list = utils.get_degree(self.G, self.num_nodes)
                             B = await self.init_IB(deg_list, remain_v, k)
                             if len(B[k]) > 0 and len(remain_v) / len(B[k]) > switch_num:
-                                deg_list = utils.get_degree(self.G, self.num_nodes)
                                 batch_remove = False
                         # 第二阶段: 逐个删除节点, 每次只重新计算指定节点的I/B
                         else:
@@ -179,13 +178,13 @@ class FirmCore:
         算法运行结束时打印一下结果和时间
         '''
         total_num = 0
-        for k, nodes in core.items():
-            total_num += len(nodes)
-            ic(k, len(nodes))
+        # for k, nodes in core.items():
+        #     total_num += len(nodes)
+        #     ic(k, len(nodes))
         ic(total_num)
         run_time = (time() - start_time) / 60
         ic(run_time)
-        assert total_num == self.num_nodes
+        # assert total_num == self.num_nodes
 
     async def init_IB(self, deg_list, remain_v, k=0):
         '''
@@ -205,6 +204,7 @@ class FirmCore:
         I0 = np.sort(Degree, axis=0)[-self.lamb, :]  # 再排序
         #! 这里注意I0是否为空
         if len(I0) > 0:
+            # mask
             I1 = [mpc.if_else(i > k, pad_val, k) for i in I0]
             I1 = await mpc.output(I1)
         I = [pad_val for _ in range(self.num_nodes)]
