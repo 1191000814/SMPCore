@@ -1,8 +1,6 @@
 """
 论文firmcore decomposition of multilayer networks的实现
 """
-
-import mem_demo.dataset as dataset
 import utils
 import numpy as np
 from icecream import ic
@@ -10,6 +8,7 @@ from tqdm import tqdm
 import networkx as nx
 import time
 import collections
+import dataset as DS
 
 def firm_core1(MG0: nx.MultiGraph, num_layers, lamb):
     '''
@@ -222,7 +221,7 @@ def get_IB(MG: nx.MultiGraph, num_nodes, k, lamb):
 if __name__ == '__main__':
     dataset = ['homo', 'sacchcere', 'sanremo', 'slashdot', 'ADHD', 'FAO', 'RM', 'TD']
     # MG = create_data.create_graph()
-    MG, num_layers = dataset.create_by_file(dataset[5], 3)
+    MG, num_layers = DS.read_graph(dataset[3], 3)
     ic(num_layers)
     firm_core1(MG, 3, 1)
     firm_core2(MG, 3, 1)

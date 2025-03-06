@@ -1,5 +1,6 @@
 # 暂时不使用图数据库, 而使用单独的图结构作为各方的数据源np
 # 无向图smpc-firmcore算法
+# * 移除次数-节点移除个数的-时间
 # ? 异步函数可以调用非异步函数, 非异步函数不可以调用异步函数
 # ? 调用一个函数时, 不需要在被调用的函数中重复声明 'aysnc with mpc:'
 
@@ -44,6 +45,7 @@ class FirmCore:
         self.max_bit_len = self.num_nodes.bit_length()  # 临时确定的bit数, 后面需要改成最大度需要的bit数
         ic(self.max_bit_len)
         self.sec_int_type = mpc.SecInt(self.max_bit_len)
+        self.time_map = dict() # * 移除节点数量 : 所用时间, 用来分析BR批量删除
 
     def sec_int(self, num):
         return self.sec_int_type(num)
@@ -91,12 +93,14 @@ class FirmCore:
             remain_v = set([i for i in range(self.num_nodes)])  # 还没被移除的点
             ic("init B")
             core = collections.defaultdict(set)
+            self.time_map[0] = 0
             with tqdm(range(self.num_nodes)) as pbar:
                 # 从0开始依次移除最小Top-d的顶点
                 for k in range(self.num_nodes):
                     if len(remain_v) == 0:
                         break
                     ic(f"--------{k}-------")
+                    self.time_map[self.num_nodes - len(remain_v)] = (time() - start_time) / 60
                     B = await self.init_IB(deg_list, remain_v, k)
                     while B[k]:
                         assert len(core[k] & B[k]) == 0
@@ -107,6 +111,7 @@ class FirmCore:
                         # ? 修改本层的度后, 传递给其他方, 然后直接计算新的I和B, 不考虑哪些节点需要更新I与否
                         self.G.remove_nodes_from(B[k])
                         deg_list = utils.get_degree(self.G, self.num_nodes)
+                        self.time_map[self.num_nodes - len(remain_v)] = (time() - start_time) / 60
                         B = await self.init_IB(deg_list, remain_v, k)
         ic(len(core[0]))
         self.print_result(core, start_time)
@@ -120,11 +125,13 @@ class FirmCore:
             remain_v = set([i for i in range(self.num_nodes)])  # 还没被移除的点
             ic("init B")
             core = collections.defaultdict(set)
+            self.time_map[0] = 0
             with tqdm(range(self.num_nodes)) as pbar:
                 for k in range(self.num_nodes):
                     if len(remain_v) == 0:
                         break
                     ic(f"--------{k}-------")
+                    self.time_map[self.num_nodes - len(remain_v)] = (time() - start_time) / 60
                     B = await self.init_IB(deg_list, remain_v, k)
                     batch_remove = True  # 处于哪一阶段, 批量True/逐个False
                     while B[k]:
@@ -137,6 +144,7 @@ class FirmCore:
                             # ? 修改本层的度后, 传递给其他方, 然后直接计算新的I和B, 不考虑哪些节点需要更新I与否
                             self.G.remove_nodes_from(B[k])
                             deg_list = utils.get_degree(self.G, self.num_nodes)
+                            self.time_map[self.num_nodes - len(remain_v)] = (time() - start_time) / 60
                             B = await self.init_IB(deg_list, remain_v, k)
                             if len(B[k]) > 0 and len(remain_v) / len(B[k]) > switch_num:
                                 batch_remove = False
@@ -157,7 +165,6 @@ class FirmCore:
         self.print_result(core, start_time)
 
     # 下面是工具函数
-
     async def set_sec_bit(self, deg_list: list):
         '''
         设置安全类型bit数, (根据全局最大的度)
@@ -177,12 +184,13 @@ class FirmCore:
         '''
         算法运行结束时打印一下结果和时间
         '''
-        total_num = 0
+        # total_num = 0
         # for k, nodes in core.items():
         #     total_num += len(nodes)
         #     ic(k, len(nodes))
-        ic(total_num)
+        # ic(total_num)
         run_time = (time() - start_time) / 60
+        ic(self.time_map)
         ic(run_time)
         # assert total_num == self.num_nodes
 
@@ -257,7 +265,7 @@ class FirmCore:
 
 if __name__ == "__main__":
     ic(args.dataset, args.version, args.param_lambda, args.switch_num)
-    datasets = {1: 'homo', 2: 'sacchcere', 3: 'sanremo', 4: 'slashdot', 5: 'Terrorist', 6: 'RM', 7: 'Yeast', 8: 'Yeast_2'}
+    datasets = {1: 'homo', 2: 'sacchcere', 3: 'sanremo', 4: 'slashdot', 5: 'Terrorist', 6: 'RM'}
     if args.dataset is None:  # 测试数据集
         dataset = None
     elif len(args.dataset) > 1:  # 合成数据集

@@ -48,7 +48,7 @@ class FirmCore:
         # 初始化时间
         self.time_pt = 0  # plaintext time
         self.time_ob = 0  # oblivious time
-        self.time_com = 0  # communication time
+        self.time_cm = 0  # communication time
         self.time_last = 0  # last time
 
     def sec_int(self, num):
@@ -206,11 +206,11 @@ class FirmCore:
         assert total_num == self.num_nodes
         ic(total_num)
         run_time = (time() - start_time) / 60
-        self.time_pt, self.time_ob, self.time_com = self.time_pt / 60, self.time_ob / 60, self.time_com / 60
-        time_sum = self.time_pt + self.time_ob + self.time_com
+        self.time_pt, self.time_ob, self.time_cm = self.time_pt / 60, self.time_ob / 60, self.time_cm / 60
+        time_sum = self.time_pt + self.time_ob + self.time_cm
         ic(self.time_pt, self.time_pt / time_sum)
         ic(self.time_ob, self.time_ob / time_sum)
-        ic(self.time_com, self.time_com / time_sum)
+        ic(self.time_cm, self.time_cm / time_sum)
         ic(run_time)
 
     async def init_IB(self, deg_list, remain_v, k=0):
@@ -223,7 +223,7 @@ class FirmCore:
         last_time = time()
         Degree = mpc.input(deg_list)  # [[layer1], [layer2]...[layern]]
 
-        self.time_com += time() - last_time
+        self.time_cm += time() - last_time
         last_time = time()
 
         Degree = [mpc.np_fromlist(deg_layer) for deg_layer in Degree]  # [np.array1, np.array2...]
@@ -266,7 +266,7 @@ class FirmCore:
         #! 这里需要使得每个mpc.input的数量都相等
         last_time = time()
         update_nums = mpc.input(self.sec_int(len(update_v)))  # 单层图需要修改I的数量
-        self.time_com += time() - last_time
+        self.time_cm += time() - last_time
 
         last_time = time()
         max_update_num = await mpc.output(mpc.max(update_nums))  # 各层中最大需要修改的数量

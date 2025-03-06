@@ -8,7 +8,7 @@ from mpyc.runtime import mpc
 from icecream import ic
 from time import time
 from tqdm import tqdm
-import mem_demo.dataset as dataset
+import dataset as DS
 import utils
 import collections
 import argparse

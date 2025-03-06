@@ -123,7 +123,7 @@ def read_my_layer(l, di=False):
 
 def read_my_graph(di=False):
     '''
-    读取整个示例图
+    读取整个示例图, 这里的层id必须是连续的, 且从1开始
     '''
     # E = sum([len(edges[l])] for l in range(L))
     E = len(edges[0]) + len(edges[1]) + len(edges[2])
@@ -390,4 +390,3 @@ if __name__ == '__main__':
         ic(MG.number_of_nodes())
         ic(MG.number_of_edges())
         write_graph(MG, 3)
-        

@@ -2,6 +2,7 @@
 # 无向图smpc-firmcore算法
 # ? 异步函数可以调用非异步函数, 非异步函数不可以调用异步函数
 # ? 调用一个函数时, 不需要在被调用的函数中重复声明 'aysnc with mpc:'
+# * 这个文件用来记录每部分的所用时间
 
 import numpy as np
 from mpyc.runtime import mpc
@@ -44,6 +45,14 @@ class FirmCore:
         self.max_bit_len = self.num_nodes.bit_length()  # 临时确定的bit数, 后面需要改成最大度需要的bit数
         ic(self.max_bit_len)
         self.sec_int_type = mpc.SecInt(self.max_bit_len)
+        # 初始化时间
+        self.time_pt = 0  # plaintext time
+        self.time_cm = 0  # communication time
+        self.time_os_oa = 0  # OS + OA
+        self.time_ou = 0  # OU
+        self.time_last = 0  # last time
+        # * 4中累计时间在每次迭代结束时的值 0: PT, 1: CM, 2: OS+OA 3: OU
+        self.time_map = [dict() for _ in range(4)]
 
     def sec_int(self, num):
         return self.sec_int_type(num)
@@ -52,20 +61,28 @@ class FirmCore:
         # 原算法1-1
         async with mpc:
             start_time = time()
+            # * PT
+            last_time = time()
             deg_list = utils.get_degree(self.G, self.num_nodes)  # 该层的节点的(明文)度列表
             await self.set_sec_bit(deg_list)
             remain_v = set([i for i in range(self.num_nodes)])  # 还没被移除的点
-            ic("init B")
+            ic("init I, B")
             core = collections.defaultdict(set)
+            self.time_pt += time() - last_time
             # 从0开始依次移除最小Top-d的顶点
             with tqdm(range(self.num_nodes)) as pbar:
                 for k in range(self.num_nodes):
+                    # * PT
+                    last_time = time()
                     if len(remain_v) == 0:
                         break
                     ic(f"--------{k}-------")
+                    self.time_pt += time() - last_time
                     # ? 和v1不同的地方: 每轮k删除完之后, 重新获取新的I和B
                     B = await self.init_IB(deg_list, remain_v, k=k)
                     while B[k]:
+                        # * PT
+                        last_time = time()
                         v_id = B[k].pop()
                         core[k].add(v_id)
                         remain_v.remove(v_id)
@@ -79,26 +96,33 @@ class FirmCore:
                             # (其实就是I值大于k的邻居节点)
                             if u_id not in B[k]:
                                 update_v.add(u_id)
+                        self.time_pt += time() - last_time
                         await self.update_IB(deg_list, list(update_v), B, k)
+                    self.time_map[0][k] = self.time_pt
+                    self.time_map[1][k] = self.time_cm
+                    self.time_map[2][k] = self.time_os_oa
+                    self.time_map[3][k] = self.time_ou
         self.print_result(core, start_time)
 
     async def smpcore_br(self):
         # 原算法2-1
         async with mpc:
             start_time = time()
+            last_time = time()
             deg_list = utils.get_degree(self.G, self.num_nodes)  # 该层的节点的(明文)度列表
             await self.set_sec_bit(deg_list)
             remain_v = set([i for i in range(self.num_nodes)])  # 还没被移除的点
             ic("init B")
             core = collections.defaultdict(set)
+            self.time_pt += time() - last_time
             with tqdm(range(self.num_nodes)) as pbar:
-                # 从0开始依次移除最小Top-d的顶点
                 for k in range(self.num_nodes):
                     if len(remain_v) == 0:
                         break
                     ic(f"--------{k}-------")
                     B = await self.init_IB(deg_list, remain_v, k)
                     while B[k]:
+                        last_time = time()
                         assert len(core[k] & B[k]) == 0
                         core[k] = core[k] | B[k]
                         remain_v = remain_v - B[k]
@@ -107,21 +131,35 @@ class FirmCore:
                         # ? 修改本层的度后, 传递给其他方, 然后直接计算新的I和B, 不考虑哪些节点需要更新I与否
                         self.G.remove_nodes_from(B[k])
                         deg_list = utils.get_degree(self.G, self.num_nodes)
+                        self.time_pt += time() - last_time
                         B = await self.init_IB(deg_list, remain_v, k)
+                    self.time_map[0][k] = self.time_pt
+                    self.time_map[1][k] = self.time_cm
+                    self.time_map[2][k] = self.time_os_oa
+                    self.time_map[3][k] = self.time_ou
         ic(len(core[0]))
         self.print_result(core, start_time)
 
-    async def smpcore_ar(self, switch_num=100):
+    async def smpcore_ar(self, switch_num=3):
         # 原算法3-1
         async with mpc:
             start_time = time()
+            # * PT
+            last_time = time()
             deg_list = utils.get_degree(self.G, self.num_nodes)  # 该层的节点的(明文)度列表
             await self.set_sec_bit(deg_list)
             remain_v = set([i for i in range(self.num_nodes)])  # 还没被移除的点
-            ic("init B")
+            ic("init I, B")
             core = collections.defaultdict(set)
+
+            self.time_pt += time() - last_time
+
             with tqdm(range(self.num_nodes)) as pbar:
                 for k in range(self.num_nodes):
+                    self.time_map[0][k] = self.time_pt
+                    self.time_map[1][k] = self.time_cm
+                    self.time_map[2][k] = self.time_os_oa
+                    self.time_map[3][k] = self.time_ou
                     if len(remain_v) == 0:
                         break
                     ic(f"--------{k}-------")
@@ -129,6 +167,8 @@ class FirmCore:
                     batch_remove = True  # 处于哪一阶段, 批量True/逐个False
                     while B[k]:
                         # 第一阶段: 批量删除节点, 每次重新计算全部节点的I/B
+                        # * PT
+                        last_time = time()
                         if batch_remove:
                             core[k] = core[k] | B[k]
                             remain_v = remain_v - B[k]
@@ -137,11 +177,18 @@ class FirmCore:
                             # ? 修改本层的度后, 传递给其他方, 然后直接计算新的I和B, 不考虑哪些节点需要更新I与否
                             self.G.remove_nodes_from(B[k])
                             deg_list = utils.get_degree(self.G, self.num_nodes)
+                            self.time_pt += time() - last_time
                             B = await self.init_IB(deg_list, remain_v, k)
+
+                            # * PT
+                            last_time = time()
                             if len(B[k]) > 0 and len(remain_v) / len(B[k]) > switch_num:
                                 batch_remove = False
+                            self.time_pt += time() - last_time
                         # 第二阶段: 逐个删除节点, 每次只重新计算指定节点的I/B
                         else:
+                            # * PT
+                            last_time = time()
                             v_id = B[k].pop()
                             core[k].add(v_id)
                             remain_v.remove(v_id)
@@ -153,6 +200,7 @@ class FirmCore:
                                 if u_id not in B[k]:
                                     update_v.add(u_id)
                             self.G.remove_node(v_id)
+                            self.time_pt += time() - last_time
                             await self.update_IB(deg_list, list(update_v), B, k)
         self.print_result(core, start_time)
 
@@ -178,24 +226,34 @@ class FirmCore:
         算法运行结束时打印一下结果和时间
         '''
         total_num = 0
-        # for k, nodes in core.items():
-        #     total_num += len(nodes)
-        #     ic(k, len(nodes))
+        for k, nodes in core.items():
+            total_num += len(nodes)
+            ic(k, len(nodes))
+        assert total_num == self.num_nodes
         ic(total_num)
         run_time = (time() - start_time) / 60
+        self.time_pt, self.time_cm, self.time_os_oa, self.time_ou = self.time_pt / 60, self.time_cm / 60, self.time_os_oa / 60, self.time_ou / 60
+        time_sum = self.time_pt + self.time_cm + self.time_os_oa + self.time_ou
+        ic(self.time_pt, self.time_pt / time_sum)
+        ic(self.time_cm, self.time_cm / time_sum)
+        ic(self.time_os_oa, self.time_os_oa / time_sum)
+        ic(self.time_ou, self.time_ou / time_sum)
+        for i in range(len(self.time_map)):
+            ic(self.time_map[i])
         ic(run_time)
-        # assert total_num == self.num_nodes
 
     async def init_IB(self, deg_list, remain_v, k=0):
-        '''
-        修改版本2:
-        在firm_core_v2中, 每次遍历只用到了B[k]的值, 那么I中值不等于k的值可以不公开计算, 减少隐私泄露量
-        计算I的密文时, 如果I[i] > k, 设置I[i] = -1
-        '''
+        # * PT
+        last_time = time()
         remain_v = list(remain_v)  # 变为列表, 需要保持遍历有序
         deg_list = [self.sec_int(deg) for deg in deg_list]  # 转化成安全矩阵
-        # Degree的[行]为层数, [列]为id
+        self.time_pt += time() - last_time
+        # * CM
+        last_time = time()
         Degree = mpc.input(deg_list)  # [[layer1], [layer2]...[layern]]
+        self.time_cm += time() - last_time
+        # * OS
+        last_time = time()
         Degree = [mpc.np_fromlist(deg_layer) for deg_layer in Degree]  # [np.array1, np.array2...]
         Degree = np.vstack(Degree)
         # remain_v中的原id -> (从0开始的连续)新id
@@ -204,9 +262,11 @@ class FirmCore:
         I0 = np.sort(Degree, axis=0)[-self.lamb, :]  # 再排序
         #! 这里注意I0是否为空
         if len(I0) > 0:
-            # mask
             I1 = [mpc.if_else(i > k, pad_val, k) for i in I0]
             I1 = await mpc.output(I1)
+        self.time_os_oa += time() - last_time
+        # * PT
+        last_time = time()
         I = [pad_val for _ in range(self.num_nodes)]
         for v_id in remain_v:
             I[v_id] = I1[node2idx[v_id]]
@@ -216,16 +276,23 @@ class FirmCore:
             # 只记录I值为k的顶点在各层的第λ大的度, 均记为k
             if I[v_id] == k:
                 B[k].add(v_id)
+        self.time_pt += time() - last_time
         return B
 
     async def update_IB(self, deg_list, update_v: list, B, k):
-        """
-        修改版本1, 传入的I为仅有k值的节点, 每次更新数组I, 并每次将I值-1之后为k的节点加入B
-        """
-        # ? 在mod1的基础上进行修改, 不重新计算所有的I的值, 只计算必须修改I值节点的I值
+        # * PT
+        last_time = time()
         deg_list = [self.sec_int(deg) for deg in deg_list]  # 转化成安全矩阵
+        self.time_pt += time() - last_time
         # Degree的[行]为层数, [列]为id
+
+        # * CM
+        last_time = time()
         Degree = mpc.input(deg_list)  # [[layer1], [layer2]...[layern]]
+        self.time_cm += time() - last_time
+
+        # * OU
+        last_time = time()
         Degree = [mpc.np_fromlist(deg_layer) for deg_layer in Degree]  # [np.array1, np.array2...]
         Degree = np.vstack(Degree)
 
@@ -235,29 +302,44 @@ class FirmCore:
         if max_update_num == 0:  # 传入的长度至少为1
             max_update_num = 1
         update_v.extend([pad_val] * (max_update_num - len(update_v)))  # 填充到最大数量
+        self.time_ou += time() - last_time
+
+        # * OS+OA
+        last_time = time()
         all_update_v = mpc.input([self.sec_int(v_id) for v_id in update_v])  # 各层需要改变I的节点
         all_update_v = [v_id for per_layer in all_update_v for v_id in per_layer]  # 全放到一个列表里, 但可能有重复
         all_update_v = set(await mpc.output(all_update_v))  # 明文后用集合表示
+        self.time_os_oa += time() - last_time
+
+        # * PT
+        last_time = time()
         #! pad_val有可能不存在
         all_update_v.discard(pad_val)
         all_update_v = list(all_update_v)  # idx -> v_id
+        self.time_pt += time() - last_time
         if all_update_v:
             # 对应all_update_v中的节点
+            # * OS+OA
+            last_time = time()
             Degree = Degree[:, all_update_v]
-            # 只包含update的顶点
             I_update = mpc.np_tolist(np.sort(Degree, axis=0)[-self.lamb, :])
             #! 比update_IB多了这一步
             I0 = [mpc.if_else(i > k, pad_val, k) for i in I_update]
-            I0 = await mpc.output(I0)
+            I = await mpc.output(I0)
+            self.time_os_oa += time() - last_time
+
+            # * PT
+            last_time = time()
             for i, v_id in enumerate(all_update_v):
-                if I0[i] == k:
+                if I[i] == k:
                     # 更新B[k]
                     B[k].add(v_id)
+            self.time_pt += time() - last_time
 
 
 if __name__ == "__main__":
     ic(args.dataset, args.version, args.param_lambda, args.switch_num)
-    datasets = {1: 'homo', 2: 'sacchcere', 3: 'sanremo', 4: 'slashdot', 5: 'Terrorist', 6: 'RM', 7: 'Yeast', 8: 'Yeast_2'}
+    datasets = {1: 'homo', 2: 'sacchcere', 3: 'sanremo', 4: 'slashdot', 5: 'Terrorist', 6: 'RM'}
     if args.dataset is None:  # 测试数据集
         dataset = None
     elif len(args.dataset) > 1:  # 合成数据集

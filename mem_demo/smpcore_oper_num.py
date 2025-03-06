@@ -1,5 +1,6 @@
 # 暂时不使用图数据库, 而使用单独的图结构作为各方的数据源np
 # 无向图smpc-firmcore算法
+# * 计算各种算子的执行次数
 # ? 异步函数可以调用非异步函数, 非异步函数不可以调用异步函数
 # ? 调用一个函数时, 不需要在被调用的函数中重复声明 'aysnc with mpc:'
 
@@ -44,6 +45,8 @@ class FirmCore:
         self.max_bit_len = self.num_nodes.bit_length()  # 临时确定的bit数, 后面需要改成最大度需要的bit数
         ic(self.max_bit_len)
         self.sec_int_type = mpc.SecInt(self.max_bit_len)
+        self.num_sort = dict()  # * {迭代轮数: 排序算子执行次数}
+        self.num_comm = dict()  # * {迭代轮数: 通信传输的总数据量}
 
     def sec_int(self, num):
         return self.sec_int_type(num)
@@ -60,6 +63,8 @@ class FirmCore:
             # 从0开始依次移除最小Top-d的顶点
             with tqdm(range(self.num_nodes)) as pbar:
                 for k in range(self.num_nodes):
+                    self.num_sort[k] = 0
+                    self.num_comm[k] = 0
                     if len(remain_v) == 0:
                         break
                     ic(f"--------{k}-------")
@@ -94,6 +99,8 @@ class FirmCore:
             with tqdm(range(self.num_nodes)) as pbar:
                 # 从0开始依次移除最小Top-d的顶点
                 for k in range(self.num_nodes):
+                    self.num_sort[k] = 0
+                    self.num_comm[k] = 0
                     if len(remain_v) == 0:
                         break
                     ic(f"--------{k}-------")
@@ -122,6 +129,8 @@ class FirmCore:
             core = collections.defaultdict(set)
             with tqdm(range(self.num_nodes)) as pbar:
                 for k in range(self.num_nodes):
+                    self.num_sort[k] = 0
+                    self.num_comm[k] = 0
                     if len(remain_v) == 0:
                         break
                     ic(f"--------{k}-------")
@@ -177,11 +186,20 @@ class FirmCore:
         '''
         算法运行结束时打印一下结果和时间
         '''
+        total_sort = 0
+        total_comm = 0
         total_num = 0
-        # for k, nodes in core.items():
-        #     total_num += len(nodes)
-        #     ic(k, len(nodes))
-        ic(total_num)
+        for k, nodes in core.items():
+            total_num += len(nodes)
+            ic(k, len(nodes))
+        for num_sort_k in self.num_sort.values():
+            total_sort += num_sort_k
+        for num_comm_k in self.num_comm.values():
+            total_comm += num_comm_k
+        ic(self.num_sort)
+        ic(self.num_comm)
+        ic(total_sort)
+        ic(total_comm / self.num_layers)
         run_time = (time() - start_time) / 60
         ic(run_time)
         # assert total_num == self.num_nodes
@@ -196,11 +214,13 @@ class FirmCore:
         deg_list = [self.sec_int(deg) for deg in deg_list]  # 转化成安全矩阵
         # Degree的[行]为层数, [列]为id
         Degree = mpc.input(deg_list)  # [[layer1], [layer2]...[layern]]
+        self.num_comm[k] += len(remain_v) * self.num_layers  # * comm
         Degree = [mpc.np_fromlist(deg_layer) for deg_layer in Degree]  # [np.array1, np.array2...]
         Degree = np.vstack(Degree)
         # remain_v中的原id -> (从0开始的连续)新id
         node2idx = {v_id: i for i, v_id in enumerate(remain_v)}
         Degree = Degree[:, remain_v]  # 先切片
+        self.num_sort[k] += len(remain_v)  # * sort
         I0 = np.sort(Degree, axis=0)[-self.lamb, :]  # 再排序
         #! 这里注意I0是否为空
         if len(I0) > 0:
@@ -232,6 +252,8 @@ class FirmCore:
         #! 这里需要使得每个mpc.input的数量都相等
         update_nums = mpc.input(self.sec_int(len(update_v)))  # 单层图需要修改I的数量
         max_update_num = await mpc.output(mpc.max(update_nums))  # 各层中最大需要修改的数量
+        real_total_num = await mpc.output(mpc.sum(update_nums))  # 各层中所有需要修改的数量之和
+        self.num_comm[k] += real_total_num  # * comm
         if max_update_num == 0:  # 传入的长度至少为1
             max_update_num = 1
         update_v.extend([pad_val] * (max_update_num - len(update_v)))  # 填充到最大数量
@@ -245,6 +267,7 @@ class FirmCore:
             # 对应all_update_v中的节点
             Degree = Degree[:, all_update_v]
             # 只包含update的顶点
+            self.num_sort[k] += len(all_update_v)
             I_update = mpc.np_tolist(np.sort(Degree, axis=0)[-self.lamb, :])
             #! 比update_IB多了这一步
             I0 = [mpc.if_else(i > k, pad_val, k) for i in I_update]
