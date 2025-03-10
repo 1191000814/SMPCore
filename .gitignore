@@ -1,0 +1,9 @@
+# Ignore everything
+*
+
+# Except code and data directories
+!code/*
+!data/*
+!README.md
+!.gitignore
+!requirements.txt

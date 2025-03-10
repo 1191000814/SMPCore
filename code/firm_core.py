@@ -1,5 +1,5 @@
 """
-论文firmcore decomposition of multilayer networks的实现
+firmcore decomposition of multilayer networks
 """
 
 import utils
@@ -59,12 +59,6 @@ def firm_core1(MG0: nx.MultiGraph, num_layers, lamb):
 
 
 def firm_core2(MG0: nx.MultiGraph, num_layers, lamb):
-    '''
-    修改: 每次删除所有能找到I[i]=k的点, 然后整体更新I
-    每次直接使用删除后的多层图重新计算I和B
-    第k次迭代一直到没有小于或等于k的I值为止
-    正确性√ 效率比前一种方法略低
-    '''
     MG = MG0.copy()
     start_time = time.time()
     num_nodes = MG.number_of_nodes()
@@ -83,7 +77,6 @@ def firm_core2(MG0: nx.MultiGraph, num_layers, lamb):
                 core[k] = core[k] | B[k]
                 pbar.update(len(B[k]))
                 # ic(B[k])
-                # 重新计算I和B
                 MG.remove_nodes_from(B[k])
                 count += len(B[k])
                 # ic(MG.number_of_nodes())
@@ -108,7 +101,6 @@ def firm_core3(MG0: nx.MultiGraph, num_layers, lamb, switch_num=3):
             while B[k]:
                 if phase:
                     # ic(B)
-                    # ? 需要删除任何I值[不大于k]的顶点, 而不是等于k的顶点
                     core[k] = core[k] | B[k]
                     pbar.update(len(B[k]))
                     # ic(B[k])
