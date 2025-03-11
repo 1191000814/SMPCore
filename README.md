@@ -39,10 +39,15 @@ python code/smpcore.py -M[] -d[] -l[] -v[] -s[] -W[] -Im-1
 The values in `[]` are options that must be specified before program execution:
 
 • `-M`: number of providers.
+
 • `-d`: dataset number, datasets 1--4 are `homo`, `Sacchere`,`Sanremo`, `Slashdot` respectively.
+
 • `-l`: value of parameter $\lambda$.
+
 • `-v`: algorithm, algorithms 1--3 are `SMPCore`, `SMPCore-BP`, `SMPCore-AP` respectively.
+
 • `-s`: value of parameter $1/\theta$.
+
 • `-W`: number of threads.
 
 > The parameters of these commands except for -I should be exactly the same.
